@@ -32,3 +32,8 @@ state.json
 *.swp
 .DS_Store
 Thumbs.db
+design/
+CLAUDE.md
+CLAUDE.local.md
+.claude/settings.local.json
+*.private.md

@@ -1,5 +1,10 @@
 # RASA for Jellyfin
 
+> **Trailhead is being rebuilt as a Jellyfin plugin** for Jellyfin 12 and later. It will install from the
+> [Campground](https://github.com/AHouseOfBards/Campground-Jellyfin) plugin catalog. This page describes the
+> standalone app it replaces, RASA 0.8.5 Beta, which is no longer developed. Its code is kept at the `legacy-0.8.5`
+> tag.
+
 Watch your Jellyfin server from anywhere.
 
 RASA sets up remote access for you. You run it once, answer three questions, and you get
@@ -22,7 +27,7 @@ macOS is not supported.
 ## Installing
 
 Download the latest release from the
-[Releases page](https://github.com/AHouseOfBards/RASA-for-Jellyfin/releases).
+[Releases page](https://github.com/AHouseOfBards/Trailhead/releases).
 
 Windows will warn you that the publisher is unknown, because RASA is not code signed.
 Click **More info**, then **Run anyway**. Every release lists a SHA-256 checksum if you
@@ -62,7 +67,7 @@ and it works. Some things have not been tested yet:
 * Working out which router you have has not yet recognised a real one. If it cannot tell,
   you can pick yours from a list.
 
-If you try it, please [open an issue](https://github.com/AHouseOfBards/RASA-for-Jellyfin/issues)
+If you try it, please [open an issue](https://github.com/AHouseOfBards/Trailhead/issues)
 and say what happened, whether it worked or not. That is the most useful thing you can do
 right now.
 
@@ -99,15 +104,14 @@ passwords taken out, ready to attach to a bug report.
 You need Go 1.26 or newer.
 
 ```sh
-git clone https://github.com/AHouseOfBards/RASA-for-Jellyfin.git
-cd RASA-for-Jellyfin
+git clone https://github.com/AHouseOfBards/Trailhead.git
+cd Trailhead
 go test ./...
 go run ./cmd/rasa -root ./.devdata
 ```
 
 That opens the wizard in your browser and keeps everything in a local folder, so you do not
-need administrator rights while developing. [SPEC.md](SPEC.md) explains how it works and
-why each decision was made.
+need administrator rights while developing.
 
 ## Licence
 
