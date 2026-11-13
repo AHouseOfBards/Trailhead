@@ -1,37 +1,24 @@
-# Build output.
-# These must stay anchored with a leading slash: a bare "rasa" would also
-# match the cmd/rasa/ source directory and silently drop it from the repo.
-/bin/
-/dist/
-/rasa
-/rasa.exe
+# Build output
+bin/
+obj/
+/artifacts/
 
-# Bundled Caddy binary, produced by xcaddy in CI — never committed.
-/third_party/caddy/
-/caddy
-/caddy.exe
-
-# Go
-*.test
-*.out
-coverage.*
-
-# Local development data directory (rasa -root)
-/.devdata/
-
-# Never commit real credentials or captured API responses containing them
+# Never commit real credentials, certificates or captured API responses
 *.pem
 *.key
-credentials.dat
-state.json
+*.pfx
 /testdata/live/
 
 # Editors / OS
+.vs/
 .vscode/
 .idea/
+*.user
 *.swp
 .DS_Store
 Thumbs.db
+
+# Private: design docs and agent notes live in the Coordination repo
 design/
 CLAUDE.md
 CLAUDE.local.md
