@@ -8,7 +8,7 @@ Remote access for Jellyfin. One guided setup in the dashboard for a web address,
 
 Trailhead is one of the [Campground](https://github.com/AHouseOfBards/Campground-Jellyfin) plugins for Jellyfin.
 
-Built with AI assistance.
+Trailhead is written with assistance from artificial intelligence models, but is still primarily built, tested and maintained by me, Bards.
 
 ## License
 
