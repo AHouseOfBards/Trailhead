@@ -1,9 +1,13 @@
 {
-  "source": "AHouseOfBards/Campground-Coordination/methodology/kit@54935f2",
+  "source": "AHouseOfBards/Campground-Coordination/methodology/kit@bddcceb",
   "files": {
     "tools/bash-guard.sh": "d8658e7d462c20732c9b72df2aa3a61f03c643f49446b8276a0c9f5a73209224",
     "tools/guard-public.sh": "a5faff41f14a9961eeaad2e267f062a98afa5fd91422aea413d148da5451e9bc",
     "tools/check-kit.sh": "8688a463b1e8234d277351f972abe3c2f7c423a100acaffc430a6fcf54aab022",
+    "tools/binchk.sh": "e22b621d2b1e6ce86d0dd1831bcc15251e102343e693b5867b5e9f976d6b1271",
+    "tools/binchk/Program.cs": "15373660e8420bb9a6448b956352c78affba6ffb8f021c468f8e2aa55a4022d5",
+    "tools/binchk/binchk.csproj": "60427d171f15bd172362d5c8ae25bd8a3f433438058bc8ed67082aaa25c0c785",
+    "tools/binchk/pkgs/pkgs.csproj": "ec94b3e31d7cb3ddcbf36e8a8b1d3d492188e830538540a9ff969b8eb8260f95",
     "tests/gate.sh": "6fe27d41d5f1b5552f4b8d67070be7be0d61971be985cc52a3eee63ce99bf62b"
   }
 }

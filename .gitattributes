@@ -22,3 +22,4 @@
 *.zip  binary
 tools/*.sh -text
 tests/gate.sh -text
+tools/binchk/** -text

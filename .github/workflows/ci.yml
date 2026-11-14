@@ -36,6 +36,20 @@ jobs:
           JELLYFIN_TFM: ${{ matrix.tfm }}
         run: sh tests/gate.sh
 
+  binchk:
+    # The shipped DLL, built against the lowest package, resolved against each release in BINCHK_VERSIONS
+    # (tests/gate.conf). Its own job because it restores every release's packages.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - name: Binary check
+        run: sh tools/binchk.sh
+
   kit-rules:
     runs-on: ubuntu-latest
     steps:
