@@ -1,6 +1,6 @@
 {
-  "version": "1.0.1",
-  "source": "AHouseOfBards/Campground-Coordination/shared@a5ed055",
+  "version": "1.1.0",
+  "source": "AHouseOfBards/Campground-Coordination/shared@f8ea4d3",
   "files": {
     ".gitattributes": "1ea2fafadea69b70c1902348304671bd72de834d7a3c661488a3f819fa1f92ea",
     "Campground.Shared.props": "d1c91ac69491a2b3433d52a06dee7af1d838c89e10238e3032abf706fc823e73",
@@ -25,11 +25,11 @@
     "src/Network/NetworkClassifier.cs": "3aa4cfbbaf53190a77d2df3d43523b049159f79a89b4cdbb1e9e2d473c23c255",
     "src/Privacy/Privacy.cs": "2cbb6f9c2a03a9f1152f72fbff17d54f052d4c4ef6dd410fe9da11fa0bff4d15",
     "src/Registry/CampgroundEvents.cs": "3d3ef82ae8bba8c3b9cc03b670f8214b3d92df3eecc066ddded2f5de89ac32bc",
-    "src/Registry/CampgroundLifetime.cs": "8271bab3c364e9a338966a13a560d84b4541ee710a001a347902a4e86f830784",
+    "src/Registry/CampgroundLifetime.cs": "e70b52d68b47e775d3798565ff257288e54fbbb088510f3cc019141d983b0914",
     "src/Registry/CampgroundRegistry.cs": "e263bebb8f031532600250c70d55b09f7ec46e4f2c08e74b59683feb91ce07ed",
     "src/Registry/Capabilities.cs": "d67045f1ca62f49f7ff853bad2bc5bad2a8337a33324e375f9dcc66c206f1fb0",
     "src/Registry/Ownership.cs": "89999fce44ab85a3cd7193fe750ae6ddd91faae0fb7e2e983a272cdf7592d2c9",
-    "src/Registry/PluginRegistry.cs": "12338178a234615485b4afdc9fd0a02959401dae6a544a6e8b4588f25e536171",
+    "src/Registry/PluginRegistry.cs": "2a34281c9599a8b71e4b216d46a5e80ed9cbd9c5f253efcd919e7e2e1534a0ad",
     "src/Security/AccessChecks.cs": "ffd75025a08fcb39225bdda8d7b2b429df493627e7dd028dc72225580bddb86e",
     "src/Security/AuthorizationHeader.cs": "8d770969e037227af349a1fdb5ec3ca63162230d668ed391d3e096cb8d6669d5",
     "src/Security/RateLimiter.cs": "627f8883a5d72face472a98ac5581926a4041237c512176266f22b2257a596d1",
@@ -40,6 +40,6 @@
     "src/Storage/CampgroundPaths.cs": "08093269e8e6fdc8373e6bb946dfd42a3060909cd85a532c6d7dbaf8a7dbfbcc",
     "src/Storage/PrivateFiles.cs": "97fc3cf2d6dd228a89ebae243fc11edb236068014c763f85b60ed375e2ff6889",
     "src/Storage/UserDataCleanup.cs": "32b0212e7584f6f640e27a23be2b519103b547c1916a7ef928b5d8216ed1add2",
-    "web/campground.js": "10adfb419514f88a3f388998b10ed5ad50e841d4ce2529cc78f07ecb58b7330c"
+    "web/campground.js": "c4e46859c195d8a912888ef9eed787d26b3a4e4eeeb287d4a75528a7acb56259"
   }
 }
