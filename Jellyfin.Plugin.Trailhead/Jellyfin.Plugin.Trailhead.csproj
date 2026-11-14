@@ -18,6 +18,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinVersion)" ExcludeAssets="runtime" />
     <PackageReference Include="Jellyfin.Model" Version="$(JellyfinVersion)" ExcludeAssets="runtime" />
+    <!-- Exact pin: 5.0.0-beta.1 is the version the T-S2 spike was tested against. Brings BouncyCastle. -->
+    <PackageReference Include="Certes" Version="[5.0.0-beta.1]" />
   </ItemGroup>
 
   <ItemGroup>
