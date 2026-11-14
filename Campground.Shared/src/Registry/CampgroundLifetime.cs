@@ -8,7 +8,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
+using System.Text.Json;
 using System.Threading;
 using Campground.Shared.Contracts;
 using Campground.Shared.Injection;
@@ -74,6 +77,8 @@ namespace Campground.Shared.Registry
         private static readonly object CopyGate = new();
         private static readonly Dictionary<string, IHostApplicationLifetime> Registered = new(StringComparer.Ordinal);
         private static string? _copyGeneration;
+        private static bool _unloadHooked;
+        private static readonly ConditionalWeakTable<IHostApplicationLifetime, object> StoppedHooked = new();
 
         /// <summary>The generation this copy belongs to, or null if it never registered (its writes go unstamped).</summary>
         internal static string? CopyGeneration => Volatile.Read(ref _copyGeneration);
@@ -90,8 +95,17 @@ namespace Campground.Shared.Registry
         {
             var generation = OpenGeneration(lifetime);
             bool isNew;
+            bool hookStopped;
+            var hookUnload = false;
             lock (CopyGate)
             {
+                hookStopped = StoppedHooked.TryAdd(lifetime, new object());
+                if (!_unloadHooked)
+                {
+                    _unloadHooked = true;
+                    hookUnload = true;
+                }
+
                 Volatile.Write(ref _copyGeneration, generation);
                 isNew = !(Registered.TryGetValue(pluginId, out var known) && ReferenceEquals(known, lifetime));
                 Registered[pluginId] = lifetime;
@@ -104,7 +118,77 @@ namespace Campground.Shared.Registry
             {
                 lifetime.ApplicationStopping.Register(() => Stopping(pluginId, generation));
             }
+
+            if (hookStopped)
+            {
+                // After every Stopping handler, so no plugin re-caches its types behind this clear (#66).
+                lifetime.ApplicationStopped.Register(ReleaseJsonCache);
+            }
+
+            if (hookUnload)
+            {
+                Try(HookUnloading);
+            }
         }
+
+        // Singleton Dispose runs after Stopped and can re-cache; Unloading is the last moment the plugin has
+        // control. The default context never unloads, so a test host or a bundled build skips it (#66).
+        private static void HookUnloading()
+        {
+            var context = AssemblyLoadContext.GetLoadContext(typeof(CampgroundLifetime).Assembly);
+            if (context != null && context != AssemblyLoadContext.Default)
+            {
+                context.Unloading += _ => ReleaseJsonCache();
+            }
+        }
+
+        private const string JsonHandlerType = "System.Text.Json.JsonSerializerOptionsUpdateHandler";
+        private static MethodInfo? _clearCache;
+        private static bool _clearCacheLooked;
+
+        /// <summary>
+        /// Empties System.Text.Json's per-process metadata cache. Reflection serialization of a plugin's own types
+        /// caches them there, and the cache keeps the plugin's collectible load context alive after Jellyfin
+        /// unloads it (#66). Does nothing if the runtime has no such hook.
+        /// </summary>
+        internal static void ReleaseJsonCache() => ReleaseJsonCache(JsonHandlerType);
+
+        // The type name is a parameter so a test can prove a missing hook is harmless.
+        internal static void ReleaseJsonCache(string handlerTypeName)
+        {
+            try
+            {
+                MethodInfo? method;
+                if (string.Equals(handlerTypeName, JsonHandlerType, StringComparison.Ordinal))
+                {
+                    if (!_clearCacheLooked)
+                    {
+                        _clearCache = FindClearCache(handlerTypeName);
+                        _clearCacheLooked = true;
+                    }
+
+                    method = _clearCache;
+                }
+                else
+                {
+                    method = FindClearCache(handlerTypeName);
+                }
+
+                method?.Invoke(null, new object?[] { null });
+            }
+            catch (Exception)
+            {
+                // Fail open: the context just stays loaded until the process ends.
+            }
+        }
+
+        private static MethodInfo? FindClearCache(string typeName)
+            => typeof(JsonSerializer).Assembly.GetType(typeName, throwOnError: false)?.GetMethod(
+                "ClearCache",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(Type[]) },
+                modifiers: null);
 
         /// <summary>Stamps a value this copy is about to store in the registry with this copy's generation.</summary>
         internal static void Stamp(object value)
