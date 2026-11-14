@@ -15,6 +15,12 @@ internal sealed class IssuerOptions
 
     /// <summary>How long clean-up of the TXT record may take once the run is over, cancelled or not.</summary>
     internal TimeSpan CleanupTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Certes retries badNonce itself for orders, but not for newAccount, which is where 50% rejection hurt (spike
+    /// T-S2). Tests raise it so a Pebble that rejects half the nonces can't fail a run by bad luck.
+    /// </summary>
+    internal int NewAccountAttempts { get; init; } = 5;
 }
 
 /// <summary>
@@ -23,8 +29,6 @@ internal sealed class IssuerOptions
 /// </summary>
 internal sealed class CertificateIssuer : ICertificateIssuer
 {
-    // Certes retries badNonce itself for orders, but not for newAccount, which is where 50% rejection hurt.
-    private const int NewAccountAttempts = 5;
     private const string BadNonce = "urn:ietf:params:acme:error:badNonce";
 
     private readonly IAcmeContext _ctx;
@@ -47,8 +51,8 @@ internal sealed class CertificateIssuer : ICertificateIssuer
     public TimeSpan? LastRetryAfter => _retryAfter();
 
     /// <summary>A Certes context that talks through our handler's HttpClient and keeps Certes's own badNonce retry at 5.</summary>
-    internal static AcmeContext NewContext(Uri directory, IKey accountKey, HttpClient client)
-        => new(directory, accountKey, new AcmeHttpClient(directory, client), 5);
+    internal static AcmeContext NewContext(Uri directory, IKey accountKey, HttpClient client, int badNonceRetries = 5)
+        => new(directory, accountKey, new AcmeHttpClient(directory, client), badNonceRetries);
 
     public async Task<IssueResult> IssueAsync(IssueRequest request, CancellationToken ct)
     {
@@ -114,7 +118,7 @@ internal sealed class CertificateIssuer : ICertificateIssuer
                 await _ctx.NewAccount(Array.Empty<string>(), true, null, null, null, ct).ConfigureAwait(false);
                 return;
             }
-            catch (AcmeRequestException e) when (attempt < NewAccountAttempts && e.Error?.Type == BadNonce)
+            catch (AcmeRequestException e) when (attempt < _options.NewAccountAttempts && e.Error?.Type == BadNonce)
             {
             }
         }

@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Jellyfin.Plugin.Trailhead.Tests" />
+    <InternalsVisibleTo Include="Jellyfin.Plugin.Trailhead.PebbleTests" />
   </ItemGroup>
 
   <Import Project="..\Campground.Shared\Campground.Shared.props" />
