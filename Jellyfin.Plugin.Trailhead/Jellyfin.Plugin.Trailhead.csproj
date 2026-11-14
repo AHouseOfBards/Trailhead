@@ -12,6 +12,9 @@
     <!-- Built against the lowest 12.x package so one build loads on every 12.x server (T3: 12.x and later only).
          CI overrides this (-p:JellyfinVersion=12.4.0) to catch API changes in newer releases. -->
     <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0.0</JellyfinVersion>
+    <!-- A class library leaves its NuGet dependencies out of bin, so Certes was missing from the folder that ships
+         and binchk found it unloadable. Jellyfin's own packages stay out: they are ExcludeAssets="runtime". -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
