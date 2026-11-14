@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.Trailhead;
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>
 {
-    /// <summary>The plugin's id. New for the plugin; RASA, the old desktop app, never had one.</summary>
+    /// <summary>Never changes: Jellyfin and the catalog match installs and updates on it.</summary>
     internal const string IdText = "e88e0913-0a07-4904-bcdc-80f925458cac";
 
     public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
