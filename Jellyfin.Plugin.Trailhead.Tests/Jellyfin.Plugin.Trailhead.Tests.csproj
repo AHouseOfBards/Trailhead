@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Jellyfin.Plugin.Trailhead\Jellyfin.Plugin.Trailhead.csproj" />
+    <!-- Test-only fake of the Dynu API (a real Kestrel server), shared with the Pebble tests and never part of the plugin. -->
+    <Compile Include="..\TestSupport\FakeDynu.cs" Link="TestSupport\FakeDynu.cs" />
   </ItemGroup>
 
 </Project>
