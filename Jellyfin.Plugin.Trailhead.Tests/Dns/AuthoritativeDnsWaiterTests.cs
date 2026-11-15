@@ -80,7 +80,7 @@ public sealed class AuthoritativeDnsWaiterTests
     }
 
     [Fact]
-    public async Task It_gives_up_after_three_minutes_and_says_how_many_servers_had_it()
+    public async Task It_gives_up_after_ten_minutes_and_says_how_many_servers_had_it()
     {
         _lookups.Txt[S1] = new[] { Value };
         _lookups.Txt[S2] = Array.Empty<string>();
@@ -89,7 +89,7 @@ public sealed class AuthoritativeDnsWaiterTests
         var error = await Assert.ThrowsAsync<DnsWaitException>(() => Clock.PumpAsync(Waiter(new[] { S1, S2 }).WaitAsync(Host, Value, CancellationToken.None), _time, TimeSpan.FromSeconds(1)));
 
         Assert.Contains("1 of 2", error.Message);
-        Assert.InRange(_time.GetUtcNow() - started, TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(6));
+        Assert.InRange(_time.GetUtcNow() - started, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(6));
     }
 
     [Fact]
