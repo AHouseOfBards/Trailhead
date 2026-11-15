@@ -181,6 +181,10 @@ internal sealed class CertificateStore
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.VerificationTime = now.UtcDateTime;
 
+        // No downloads: with them the builder followed the top certificate's AIA caIssuers URL and returned 4
+        // elements for the 3 the CA served (a live staging run), and the check must work offline anyway.
+        chain.ChainPolicy.DisableCertificateDownloads = true;
+
         // The root isn't in what the CA serves, and a non-self-signed certificate can't be made the trust anchor
         // (that gave PartialChain). So the build is expected to end "untrusted"; what must hold is that it used
         // every certificate we were given, with no other problem: signatures, dates, CA flags.
@@ -191,7 +195,24 @@ internal sealed class CertificateStore
             return "The certificate chain does not verify: " + string.Join(", ", chainProblems.Select(s => s.Status));
         }
 
-        if (chain.ChainElements.Count != staged.Chain.Count)
+        // The served certificates must come first, in order. The builder may add what the top one's issuer
+        // resolved to (a root from the machine's store, say), so a count match is wrong; only that one may follow.
+        var elements = chain.ChainElements;
+        if (elements.Count < staged.Chain.Count)
+        {
+            return "The certificate chain does not link up.";
+        }
+
+        for (var i = 0; i < staged.Chain.Count; i++)
+        {
+            if (!elements[i].Certificate.RawData.AsSpan().SequenceEqual(staged.Chain[i].RawData))
+            {
+                return "The certificate chain does not link up.";
+            }
+        }
+
+        if (elements.Count > staged.Chain.Count
+            && !string.Equals(elements[staged.Chain.Count].Certificate.Subject, top.Issuer, StringComparison.Ordinal))
         {
             return "The certificate chain does not link up.";
         }

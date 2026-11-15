@@ -71,7 +71,7 @@ internal static class TestPki
     private static readonly DateTimeOffset CaTo = new(2040, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The chain PEM a CA would serve (leaf, then the intermediate) and the leaf's key.</summary>
-    internal static (string ChainPem, RSA Key, X509Certificate2 Root) Issue(string name, string rootCn, DateTimeOffset notBefore, DateTimeOffset notAfter)
+    internal static (string ChainPem, RSA Key, X509Certificate2 Root) Issue(string name, string rootCn, DateTimeOffset notBefore, DateTimeOffset notAfter, string? intermediateAia = null)
     {
         using var rootKey = RSA.Create(2048);
         var rootReq = new CertificateRequest("CN=" + rootCn, rootKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -81,6 +81,11 @@ internal static class TestPki
         using var interKey = RSA.Create(2048);
         var interReq = new CertificateRequest("CN=Test Intermediate R1", interKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         interReq.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        if (intermediateAia is not null)
+        {
+            interReq.CertificateExtensions.Add(new X509AuthorityInformationAccessExtension(null, new[] { intermediateAia }));
+        }
+
         using var interPublic = interReq.Create(root, CaFrom, CaTo, RandomNumberGenerator.GetBytes(8));
         using var inter = interPublic.CopyWithPrivateKey(interKey);
 

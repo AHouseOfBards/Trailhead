@@ -52,6 +52,51 @@ public sealed class CertificateStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task A_top_certificate_with_an_AIA_url_installs_without_contacting_it()
+    {
+        // The live staging CA's top certificate had a caIssuers URL, and the chain builder fetched the root from
+        // it, so 3 served certificates became 4 elements. The check must not use the network.
+        using var server = new CaIssuersServer();
+        var now = _time.GetUtcNow();
+        var (pem, key, root) = TestPki.Issue(Name, Root, now.AddHours(-1), now.AddDays(90), server.Url);
+        server.Serve(root.RawData);
+
+        var result = Store().Install(pem, key, Expect());
+        await server.StopAsync();
+
+        Assert.True(result.Ok, result.Reason);
+        Assert.Equal(0, server.Requests);
+    }
+
+    [Fact]
+    public void Refuses_a_chain_with_an_unrelated_certificate_in_the_middle()
+    {
+        var (pem, key) = Make();
+        var (otherPem, _) = Make("other.example.org");
+        var served = Split(pem);
+        var stranger = Split(otherPem)[1];
+
+        var result = Store().Install(Join(served[0], stranger, served[1]), key, Expect());
+
+        Assert.False(result.Ok);
+    }
+
+    [Fact]
+    public void Refuses_a_leaf_followed_only_by_another_chains_intermediate()
+    {
+        var (pem, key) = Make();
+        var (otherPem, _) = Make("other.example.org");
+
+        var result = Store().Install(Join(Split(pem)[0], Split(otherPem)[1]), key, Expect());
+
+        Assert.False(result.Ok);
+    }
+
+    private static string[] Split(string pem) => pem.Split("-----BEGIN", StringSplitOptions.RemoveEmptyEntries).Select(p => "-----BEGIN" + p.Trim()).ToArray();
+
+    private static string Join(params string[] certs) => string.Join("\n", certs) + "\n";
+
+    [Fact]
     public void Replacing_keeps_the_previous_certificate_and_leaves_no_temp_file()
     {
         var (pem1, key1) = Make();

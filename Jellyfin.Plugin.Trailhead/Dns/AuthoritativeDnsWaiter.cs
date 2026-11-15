@@ -21,7 +21,9 @@ internal sealed class DnsWaitOptions
 {
     internal TimeSpan Interval { get; init; } = TimeSpan.FromSeconds(5);
 
-    internal TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(3);
+    // Three minutes wasn't enough on live Dynu: after a few records in a row, one record was on 1 of 6 nameservers
+    // at 180 s. Waiting longer costs nothing at Let's Encrypt; giving up early costs a retry 15 minutes later.
+    internal TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
 
     /// <summary>The longest one nameserver gets to answer one question.</summary>
     internal TimeSpan QueryTimeout { get; init; } = TimeSpan.FromSeconds(5);
