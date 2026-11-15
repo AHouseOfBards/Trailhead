@@ -1,0 +1,51 @@
+# Weekly audit of the parent domains Trailhead offers, against the live Public Suffix List.
+#
+# A parent that leaves the list breaks nothing on the day it happens. Let's Encrypt counts its weekly limit per
+# registered domain, so every Trailhead user on that parent would share one bucket, and issuance would start failing
+# weeks later for reasons no one user could see. A schedule is the only thing that would notice.
+#
+# The unit tests run the same check against a pinned copy of the list. This is the only place the live list is fetched,
+# and the gate never runs it.
+name: audit
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-suffix-list:
+    name: Offered parents are on the Public Suffix List
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Fetch the live list
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 \
+            --output "$RUNNER_TEMP/public_suffix_list.dat" https://publicsuffix.org/list/public_suffix_list.dat
+          rules=$(grep -c -v -E '^[[:space:]]*(//|$)' "$RUNNER_TEMP/public_suffix_list.dat" || true)
+          echo "The list has $rules rules."
+          # An empty, truncated or redirected download must fail here. It must never read as a pass.
+          if [ "${rules:-0}" -lt 5000 ]; then
+            echo "The list looks wrong: $rules rules, expected thousands." >&2
+            exit 1
+          fi
+
+      - name: Check every offered parent is on it
+        env:
+          TRAILHEAD_PSL_FILE: ${{ runner.temp }}/public_suffix_list.dat
+        shell: bash
+        run: |
+          dotnet test Jellyfin.Plugin.Trailhead.Tests \
+            --filter "FullyQualifiedName~Live_Public_Suffix_List_has_every_offered_parent" \
+            --logger "console;verbosity=normal" | tee "$RUNNER_TEMP/audit.log"
+          # A filter that matches nothing exits 0, so insist that the test really ran and passed.
+          grep -q "Passed Jellyfin.Plugin.Trailhead.Tests.Dns.PublicSuffixListTests.Live_Public_Suffix_List_has_every_offered_parent" "$RUNNER_TEMP/audit.log"

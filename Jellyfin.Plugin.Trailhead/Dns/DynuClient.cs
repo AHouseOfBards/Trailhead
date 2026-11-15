@@ -7,6 +7,10 @@ namespace Jellyfin.Plugin.Trailhead.Dns;
 
 internal sealed record DynuDomain(long Id, string Name);
 
+internal sealed record DynuRoot(long Id, string DomainName, string Node);
+
+internal sealed record DynuCreateResult(DynuDomain Domain, bool Created);
+
 internal sealed class DynuClientOptions
 {
     internal int MaxAttempts { get; init; } = 3;
@@ -30,6 +34,8 @@ internal sealed class DynuClient : IDisposable
 
     // Short: a challenge record only has to live until the CA has looked at it.
     private const int Ttl = 120;
+
+    private const int DomainTtl = 90;
 
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
@@ -94,6 +100,61 @@ internal sealed class DynuClient : IDisposable
 
         return result;
     }
+
+    /// <summary>
+    /// Which zone a hostname belongs to (GET dns/getroot/{hostname}), or null when the answer has no domain name.
+    /// Only ids and names are read.
+    /// </summary>
+    internal async Task<DynuRoot?> GetRootAsync(string hostname, CancellationToken ct)
+    {
+        using var doc = await SendAsync(HttpMethod.Get, "dns/getroot/" + Uri.EscapeDataString(hostname), null, ct).ConfigureAwait(false);
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var root = doc.RootElement;
+        var domainName = root.TryGetProperty("domainName", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+        if (string.IsNullOrEmpty(domainName))
+        {
+            return null;
+        }
+
+        var id = root.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.Number && i.TryGetInt64(out var idValue) ? idValue : 0;
+        var node = root.TryGetProperty("node", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? string.Empty : string.Empty;
+        return new DynuRoot(id, domainName, node);
+    }
+
+    /// <summary>
+    /// Claims a hostname. A name already on the account comes back as it is (Created false), so a re-run makes no second
+    /// one. POST dns answers with a status only, so the id is found afterwards in the list.
+    /// </summary>
+    internal async Task<DynuCreateResult> CreateDomainAsync(string name, CancellationToken ct)
+    {
+        var existing = Find(await ListDomainsAsync(ct).ConfigureAwait(false), name);
+        if (existing is not null)
+        {
+            return new DynuCreateResult(existing, Created: false);
+        }
+
+        // No address: publishing one is the address sync's job, and no AAAA goes out until it has been tested (T12).
+        var body = new { name, ttl = DomainTtl, ipv4 = false, ipv6 = false };
+        using (await SendAsync(HttpMethod.Post, "dns", body, ct).ConfigureAwait(false))
+        {
+        }
+
+        var created = Find(await ListDomainsAsync(ct).ConfigureAwait(false), name);
+        if (created is null)
+        {
+            // The list may lag the create; the next run finds it through the check above.
+            throw new DynuException(FailureKind.Transient, "Dynu accepted the new name, but it is not in the account's list yet.");
+        }
+
+        return new DynuCreateResult(created, Created: true);
+    }
+
+    private static DynuDomain? Find(IReadOnlyList<DynuDomain> domains, string name)
+        => domains.FirstOrDefault(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Adds a TXT record and returns its id.</summary>
     internal async Task<long> AddTxtAsync(long domainId, string nodeName, string text, CancellationToken ct)
@@ -168,7 +229,7 @@ internal sealed class DynuClient : IDisposable
 
             if (attempt >= _options.MaxAttempts)
             {
-                throw new DynuException(FailureKind.Transient, error.Message + $" Gave up after {attempt} attempts.", error.Status);
+                throw new DynuException(FailureKind.Transient, error.Message + $" Gave up after {attempt} attempts.", error.Status, fromEnvelope: error.FromEnvelope, errorType: error.ErrorType);
             }
 
             // Exponential with jitter: hammering a rate limit is how an account gets throttled harder.
@@ -310,15 +371,15 @@ internal sealed class DynuClient : IDisposable
         var application = status is 501 or 505 || (fromEnvelope && status is 502 or 503);
         if (application)
         {
-            return new DynuException(FailureKind.Permanent, text, status);
+            return new DynuException(FailureKind.Permanent, text, status, fromEnvelope: fromEnvelope, errorType: type);
         }
 
         if (status == 429 || status >= 500)
         {
-            return new DynuException(FailureKind.Transient, text, status);
+            return new DynuException(FailureKind.Transient, text, status, fromEnvelope: fromEnvelope, errorType: type);
         }
 
-        return new DynuException(FailureKind.Permanent, text, status);
+        return new DynuException(FailureKind.Permanent, text, status, fromEnvelope: fromEnvelope, errorType: type);
     }
 
     private void Log(HttpMethod method, string path, int status, int attempt)

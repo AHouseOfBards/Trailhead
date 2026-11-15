@@ -8,13 +8,24 @@ namespace Jellyfin.Plugin.Trailhead.Dns;
 /// </summary>
 internal sealed class DynuException : Exception
 {
-    internal DynuException(FailureKind kind, string message, int status = 0, bool authRejected = false)
+    internal DynuException(FailureKind kind, string message, int status = 0, bool authRejected = false, bool fromEnvelope = false, string? errorType = null)
         : base(message)
     {
         Kind = kind;
         Status = status;
         AuthRejected = authRejected;
+        FromEnvelope = fromEnvelope;
+        ErrorType = errorType;
     }
+
+    /// <summary>
+    /// The status came out of Dynu's JSON body, not the HTTP status line. It tells Dynu's own 503 ("your account is
+    /// full") from a gateway's 503 ("try again shortly").
+    /// </summary>
+    internal bool FromEnvelope { get; }
+
+    /// <summary>Dynu's error category, such as "Argument Exception", when it looked like one. Never its free-text message.</summary>
+    internal string? ErrorType { get; }
 
     /// <summary>Transient is worth another try later; permanent needs something to change (the key, the account, the name).</summary>
     internal FailureKind Kind { get; }

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "updated": "2026-11-14",
+  "note": "A parent domain is offered only if it is on the Public Suffix List: Let's Encrypt counts its weekly limit per registered domain, so on an unlisted parent every Trailhead user would share one bucket. The weekly audit workflow re-checks this.",
+  "domains": [
+    { "name": "freeddns.org", "default": true, "rank": 1 },
+    { "name": "mywire.org", "rank": 2 },
+    { "name": "webredirect.org", "rank": 3 },
+    { "name": "kozow.com", "rank": 4 },
+    { "name": "loseyourip.com", "rank": 5 },
+    { "name": "casacam.net", "rank": 6 },
+    { "name": "ddnsgeek.com", "rank": 7 },
+    { "name": "gleeze.com", "rank": 8 },
+    { "name": "opik.net", "rank": 9 }
+  ],
+  "blocked": [
+    { "name": "flashhub.net", "reason": "not on the Public Suffix List" },
+    { "name": "ezgateway.net", "reason": "not on the Public Suffix List" },
+    { "name": "remotewire.net", "reason": "not on the Public Suffix List" },
+    { "name": "dynu.com", "reason": "not on the Public Suffix List, and not offered on the free tier" },
+    { "name": "dynu.org", "reason": "not on the Public Suffix List, and not offered on the free tier" }
+  ]
+}
