@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Campground.Shared.Storage;
 using Certes;
+using Jellyfin.Plugin.Trailhead.Dns;
 
 namespace Jellyfin.Plugin.Trailhead.Acme;
 
@@ -69,6 +70,9 @@ internal sealed class FailureBudget
                 }
 
                 return (int)acme.Status >= 500 || (int)acme.Status == 0 ? FailureKind.Transient : FailureKind.Permanent;
+            case DynuException dynu:
+                // Dynu said no to the request itself (the key, the account, the name): nothing changes by asking again.
+                return dynu.Kind;
             default:
                 return FailureKind.Transient;
         }

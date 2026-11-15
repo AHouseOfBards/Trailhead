@@ -203,7 +203,7 @@ internal sealed class Rig : IDisposable
     private readonly TempFolder _folder = new();
     private readonly HttpClient _client;
 
-    internal Rig(PebbleEnv env, bool nonceReject = false, TimeProvider? time = null, int budgetLimit = 3)
+    internal Rig(PebbleEnv env, bool nonceReject = false, TimeProvider? time = null, int budgetLimit = 3, Func<Rig, IDnsChallenge>? challenge = null)
     {
         Env = env;
         Time = time ?? TimeProvider.System;
@@ -227,7 +227,7 @@ internal sealed class Rig : IDisposable
         var ctx = CertificateIssuer.NewContext(Directory, KeyFactory.NewKey(KeyAlgorithm.ES256), _client, nonceReject ? 20 : 5);
         Issuer = new CertificateIssuer(
             ctx,
-            Dns,
+            challenge?.Invoke(this) ?? Dns,
             Time,
             Log,
             () => handler.LastRetryAfter,
