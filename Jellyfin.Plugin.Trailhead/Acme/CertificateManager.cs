@@ -33,12 +33,18 @@ internal enum ReconcileOutcome
 
 internal sealed record ReconcileResult(ReconcileOutcome Outcome, DateTimeOffset? NextCheck, FailureKind? Kind, string? Message);
 
+/// <summary>What the renewal task needs from a manager; the tests of the task use a canned one.</summary>
+internal interface ICertificateRenewer
+{
+    Task<ReconcileResult> ReconcileAsync(bool force, CancellationToken ct);
+}
+
 /// <summary>
 /// Brings the stored certificate to what it should be: asks the policy whether it is time, checks the failure
 /// budget, issues, checks and stores. Running it again does only what is still needed. It reports problems as
 /// results; only cancellation throws, because it can run in the background and a failure there must never reach Jellyfin.
 /// </summary>
-internal sealed class CertificateManager
+internal sealed class CertificateManager : ICertificateRenewer
 {
     private static readonly TimeSpan TransientRetry = TimeSpan.FromMinutes(15);
 
@@ -60,6 +66,9 @@ internal sealed class CertificateManager
         _logger = logger;
         _options = options;
     }
+
+    // Explicit: the method is internal, and an interface member must be public to be implemented implicitly.
+    Task<ReconcileResult> ICertificateRenewer.ReconcileAsync(bool force, CancellationToken ct) => ReconcileAsync(force, ct);
 
     /// <summary>Raised after a new certificate is stored. A listener that throws is logged and ignored.</summary>
     internal event Action<StoredCertificate>? CertificateChanged;
