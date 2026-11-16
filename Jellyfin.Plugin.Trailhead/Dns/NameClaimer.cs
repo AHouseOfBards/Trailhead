@@ -8,8 +8,8 @@ internal enum ClaimKind
     /// <summary>Already on this account: reuse it.</summary>
     Ours,
 
-    /// <summary>Check only: nothing says it is taken. Creating it is the real test.</summary>
-    Free,
+    /// <summary>Check only: not on this account, and Dynu can't say more until the name is claimed.</summary>
+    Unchecked,
 
     Claimed,
 
@@ -50,8 +50,8 @@ internal sealed class NameClaimer
     }
 
     /// <summary>
-    /// Looks without creating. Ours when the account has it; Taken when Dynu roots the name at itself on an account
-    /// that isn't ours; otherwise Free, which is only advice (a name can be held with no address published).
+    /// Looks without creating: Ours when the account has it, otherwise Unchecked. Dynu has no way to ask whether a
+    /// name is free; the claim is the test.
     /// </summary>
     internal async Task<NameClaim> CheckAsync(string? label, string? parent, CancellationToken ct)
     {
@@ -71,20 +71,9 @@ internal sealed class NameClaimer
                 return Done(ClaimKind.Ours, "That name is already on your Dynu account. Trailhead will use it.", name, parentName, domain: ours);
             }
 
-            try
-            {
-                var root = await _dynu.GetRootAsync(name, ct).ConfigureAwait(false);
-                if (root is not null && root.DomainName.Equals(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Done(ClaimKind.Taken, TakenMessage, name, parentName, alternatives: Alternatives(HostLabel.Check(label).Label, parentName));
-                }
-            }
-            catch (DynuException e) when (e.Kind == FailureKind.Permanent && !e.AuthRejected)
-            {
-                // Dynu not knowing the name (501) is the common case for a free one. Not a reason to stop.
-            }
-
-            return Done(ClaimKind.Free, "That name looks free.", name, parentName);
+            // No getroot: live, it answered 501 for every name not on this account, www.freeddns.org (held elsewhere)
+            // included, so it can't tell taken from free. Only the create says, with 505 for taken.
+            return Done(ClaimKind.Unchecked, "Trailhead will find out when you press Continue.", name, parentName);
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {

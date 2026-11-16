@@ -173,6 +173,15 @@ internal sealed class FakeDynu : IAsyncDisposable
         }
 
         var path = ctx.Request.Path.Value ?? string.Empty;
+
+        // Live Dynu (2026-11-16) answers a chunked body (no Content-Length) with 501 "Invalid.", the same JSON with a
+        // length is accepted. Copy that, so a client that streams its body fails here as it would there.
+        if (body.Length > 0 && ctx.Request.ContentLength is null)
+        {
+            await WriteAsync(ctx, 501, Envelope(501, "Argument Exception", "Invalid.")).ConfigureAwait(false);
+            return;
+        }
+
         FakeDynuCanned? canned = null;
         lock (_gate)
         {
@@ -305,7 +314,9 @@ internal sealed class FakeDynu : IAsyncDisposable
         {
             var own = _domains.Where(d => d.Name.Equals(host, StringComparison.OrdinalIgnoreCase)).Select(d => (long?)d.Id).FirstOrDefault();
             id = own;
-            known = own is not null || _foreign.Contains(host.ToLowerInvariant());
+            // Live Dynu (2026-11-16): getroot answers 501 for any name not on the caller's account, including one
+            // another account holds (www.freeddns.org). So a foreign name is not "known" here either.
+            known = own is not null;
         }
 
         if (!known)

@@ -7,8 +7,6 @@ namespace Jellyfin.Plugin.Trailhead.Dns;
 
 internal sealed record DynuDomain(long Id, string Name);
 
-internal sealed record DynuRoot(long Id, string DomainName, string Node);
-
 internal sealed record DynuCreateResult(DynuDomain Domain, bool Created);
 
 internal sealed class DynuClientOptions
@@ -99,30 +97,6 @@ internal sealed class DynuClient : IDisposable
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Which zone a hostname belongs to (GET dns/getroot/{hostname}), or null when the answer has no domain name.
-    /// Only ids and names are read.
-    /// </summary>
-    internal async Task<DynuRoot?> GetRootAsync(string hostname, CancellationToken ct)
-    {
-        using var doc = await SendAsync(HttpMethod.Get, "dns/getroot/" + Uri.EscapeDataString(hostname), null, ct).ConfigureAwait(false);
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var root = doc.RootElement;
-        var domainName = root.TryGetProperty("domainName", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
-        if (string.IsNullOrEmpty(domainName))
-        {
-            return null;
-        }
-
-        var id = root.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.Number && i.TryGetInt64(out var idValue) ? idValue : 0;
-        var node = root.TryGetProperty("node", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? string.Empty : string.Empty;
-        return new DynuRoot(id, domainName, node);
     }
 
     /// <summary>
@@ -245,6 +219,8 @@ internal sealed class DynuClient : IDisposable
         request.Headers.Add("Accept", "application/json");
         if (body is not null)
         {
+            // StringContent, not JsonContent: JsonContent streams the body with no Content-Length, and live Dynu
+            // answers that with 501 "Invalid." for every create (2026-11-16). FakeDynu refuses it the same way.
             request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         }
 

@@ -217,23 +217,25 @@ public sealed class NameClaimerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Check_says_Taken_for_a_name_Dynu_roots_at_itself_on_another_account()
+    public async Task Check_does_not_call_a_name_someone_else_has_free()
     {
+        // Live: www.freeddns.org is held elsewhere, and only the claim (505) said so; the check had said "looks free".
         _dynu.AddForeignDomain("www.freeddns.org");
 
         var result = await Check("www", "freeddns.org");
 
-        Assert.Equal(ClaimKind.Taken, result.Kind);
-        Assert.NotEmpty(result.Alternatives!);
+        Assert.Equal(ClaimKind.Unchecked, result.Kind);
+        Assert.DoesNotContain("free", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, Creates);
     }
 
     [Fact]
-    public async Task Check_says_Free_when_nothing_shows_the_name_taken_and_creates_nothing()
+    public async Task Check_of_a_name_not_on_the_account_says_the_claim_will_tell_and_creates_nothing()
     {
         var result = await Check("mymedia", "freeddns.org");
 
-        Assert.Equal(ClaimKind.Free, result.Kind);
+        Assert.Equal(ClaimKind.Unchecked, result.Kind);
+        Assert.Contains("Continue", result.Message, StringComparison.Ordinal);
         Assert.Equal(0, Creates);
         Assert.Empty(_dynu.DomainNames);
     }
