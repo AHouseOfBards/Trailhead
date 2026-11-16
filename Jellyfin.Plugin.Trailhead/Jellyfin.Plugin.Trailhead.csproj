@@ -28,6 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Dns\parent-domains.json" LogicalName="parent-domains.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Jellyfin.Plugin.Trailhead.Tests" />
     <InternalsVisibleTo Include="Jellyfin.Plugin.Trailhead.PebbleTests" />
   </ItemGroup>

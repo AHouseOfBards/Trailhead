@@ -1,0 +1,57 @@
+// Excerpt of the Public Suffix List, pinned as test data. Not the whole list: only the section the parent-domain
+// catalogue is audited against, plus the first lines of the file for its format.
+// Source: https://publicsuffix.org/list/public_suffix_list.dat
+// List VERSION: 2026-11-13_14-44-35_UTC   COMMIT: 71c235dd3f888dd4ecd066817050a7482da710e5
+// Fetched 2026-11-14. The weekly audit workflow checks the live list; this copy only lets the audit logic run offline.
+// Re-pin it with a fresh excerpt when the offered parents change. It is not auto-updated, on purpose: a test that
+// moves under you can't tell a code bug from a list change.
+
+// ===BEGIN ICANN DOMAINS===
+
+// com : https://en.wikipedia.org/wiki/.com
+com
+
+// net : https://en.wikipedia.org/wiki/.net
+net
+
+// org : https://en.wikipedia.org/wiki/.org
+org
+
+// ===END ICANN DOMAINS===
+// ===BEGIN PRIVATE DOMAINS===
+
+// Dynu.com : https://www.dynu.com/
+1cooldns.com
+bumbleshrimp.com
+ddnsfree.com
+ddnsgeek.com
+ddnsguru.com
+dynuddns.com
+dynuhosting.com
+giize.com
+gleeze.com
+kozow.com
+loseyourip.com
+ooguy.com
+pivohosting.com
+theworkpc.com
+wiredbladehosting.com
+casacam.net
+dynu.net
+dynuddns.net
+mysynology.net
+opik.net
+spryt.net
+accesscam.org
+camdvr.org
+freeddns.org
+mywire.org
+roxa.org
+webredirect.org
+myddns.rocks
+
+// A wildcard and an exception rule, which the audit must not count as exact entries.
+*.example-wildcard.test
+!www.example-wildcard.test
+
+// ===END PRIVATE DOMAINS===

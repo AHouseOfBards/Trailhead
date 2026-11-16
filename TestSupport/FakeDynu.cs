@@ -42,6 +42,8 @@ internal sealed class FakeDynu : IAsyncDisposable
     private readonly List<FakeDynuRecord> _records = new();
     private readonly List<FakeDynuRequest> _requests = new();
     private readonly Queue<FakeDynuCanned> _canned = new();
+    private readonly Queue<FakeDynuCanned> _createScript = new();
+    private readonly HashSet<string> _foreign = new();
     private long _nextDomain = 1000;
     private long _nextRecord = 5000;
 
@@ -109,6 +111,35 @@ internal sealed class FakeDynu : IAsyncDisposable
         }
     }
 
+    /// <summary>A name that belongs to another account: it is never listed, and creating it fails with 505.</summary>
+    internal void AddForeignDomain(string name)
+    {
+        lock (_gate)
+        {
+            _foreign.Add(name.ToLowerInvariant());
+        }
+    }
+
+    /// <summary>Scripted answers for POST /v2/dns only (the first call of a claim is a list, so Enqueue can't aim at the create).</summary>
+    internal void EnqueueCreate(FakeDynuCanned canned)
+    {
+        lock (_gate)
+        {
+            _createScript.Enqueue(canned);
+        }
+    }
+
+    internal IReadOnlyList<string> DomainNames
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _domains.Select(d => d.Name).ToList();
+            }
+        }
+    }
+
     internal void Enqueue(FakeDynuCanned canned)
     {
         lock (_gate)
@@ -142,6 +173,15 @@ internal sealed class FakeDynu : IAsyncDisposable
         }
 
         var path = ctx.Request.Path.Value ?? string.Empty;
+
+        // Live Dynu (2026-11-16) answers a chunked body (no Content-Length) with 501 "Invalid.", the same JSON with a
+        // length is accepted. Copy that, so a client that streams its body fails here as it would there.
+        if (body.Length > 0 && ctx.Request.ContentLength is null)
+        {
+            await WriteAsync(ctx, 501, Envelope(501, "Argument Exception", "Invalid.")).ConfigureAwait(false);
+            return;
+        }
+
         FakeDynuCanned? canned = null;
         lock (_gate)
         {
@@ -191,6 +231,18 @@ internal sealed class FakeDynu : IAsyncDisposable
                 return;
             }
 
+            if (parts.Length == 2 && ctx.Request.Method == "POST")
+            {
+                await CreateDomainAsync(ctx, body).ConfigureAwait(false);
+                return;
+            }
+
+            if (parts.Length == 4 && parts[2] == "getroot" && ctx.Request.Method == "GET")
+            {
+                await GetRootAsync(ctx, Uri.UnescapeDataString(parts[3])).ConfigureAwait(false);
+                return;
+            }
+
             if (parts.Length == 4 && parts[3] == "record" && ctx.Request.Method == "POST" && long.TryParse(parts[2], out var domainId))
             {
                 await AddRecordAsync(ctx, domainId, body).ConfigureAwait(false);
@@ -205,6 +257,75 @@ internal sealed class FakeDynu : IAsyncDisposable
         }
 
         await WriteAsync(ctx, 404, Envelope(404, "Not Found")).ConfigureAwait(false);
+    }
+
+    private async Task CreateDomainAsync(HttpContext ctx, string body)
+    {
+        FakeDynuCanned? scripted = null;
+        lock (_gate)
+        {
+            if (_createScript.Count > 0)
+            {
+                scripted = _createScript.Dequeue();
+            }
+        }
+
+        if (scripted is not null)
+        {
+            await WriteAsync(ctx, scripted.Http, scripted.Body).ConfigureAwait(false);
+            return;
+        }
+
+        string? name = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            name = doc.RootElement.GetProperty("name").GetString()?.ToLowerInvariant();
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+        }
+
+        if (string.IsNullOrEmpty(name))
+        {
+            await WriteAsync(ctx, 200, Envelope(501, "Argument Exception", "Argument is invalid.")).ConfigureAwait(false);
+            return;
+        }
+
+        bool exists;
+        lock (_gate)
+        {
+            exists = _foreign.Contains(name) || _domains.Any(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (!exists)
+            {
+                _domains.Add((_nextDomain++, name));
+            }
+        }
+
+        // 505 is what the old app saw live for a name that already exists.
+        await WriteAsync(ctx, 200, exists ? Envelope(505, "Validation Exception", "Hostname is taken.") : Envelope(200)).ConfigureAwait(false);
+    }
+
+    private async Task GetRootAsync(HttpContext ctx, string host)
+    {
+        long? id = null;
+        var known = false;
+        lock (_gate)
+        {
+            var own = _domains.Where(d => d.Name.Equals(host, StringComparison.OrdinalIgnoreCase)).Select(d => (long?)d.Id).FirstOrDefault();
+            id = own;
+            // Live Dynu (2026-11-16): getroot answers 501 for any name not on the caller's account, including one
+            // another account holds (www.freeddns.org). So a foreign name is not "known" here either.
+            known = own is not null;
+        }
+
+        if (!known)
+        {
+            await WriteAsync(ctx, 200, Envelope(501, "Argument Exception", "Argument is invalid.")).ConfigureAwait(false);
+            return;
+        }
+
+        await WriteAsync(ctx, 200, JsonSerializer.Serialize(new { statusCode = 200, id = id ?? 0, domainName = host, hostname = host, node = string.Empty })).ConfigureAwait(false);
     }
 
     private async Task ListAsync(HttpContext ctx)
