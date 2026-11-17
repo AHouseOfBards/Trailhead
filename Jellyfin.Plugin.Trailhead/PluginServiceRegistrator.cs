@@ -16,5 +16,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // implementations by scanning plugin assemblies and builds them itself, so a registration would be a second,
         // unused copy.
         serviceCollection.AddSingleton<CertificateServices>();
+
+        // The setup routes' work. It does no I/O until a route is called, for the same reason.
+        serviceCollection.AddSingleton<SetupService>();
     }
 }

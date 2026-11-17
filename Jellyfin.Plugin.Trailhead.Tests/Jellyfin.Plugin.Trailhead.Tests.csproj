@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <None Update="TestData\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The route table the auth test compares the real routes against. -->
+    <None Include="..\docs\api.md" Link="docs\api.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

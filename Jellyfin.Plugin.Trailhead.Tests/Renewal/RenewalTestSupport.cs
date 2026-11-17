@@ -99,6 +99,13 @@ internal static class RenewalTestKit
         return proxy;
     }
 
+    /// <summary>
+    /// What Jellyfin's own save used to do: replace the configuration object. The plugin's UpdateConfiguration now keeps
+    /// the Trailhead-owned settings, so a test that needs a saved address or key puts a whole object in directly.
+    /// </summary>
+    internal static void SwapConfiguration(Plugin plugin, Configuration.PluginConfiguration config)
+        => typeof(Plugin).BaseType!.GetProperty("Configuration", BindingFlags.Public | BindingFlags.Instance)!.GetSetMethod(nonPublic: true)!.Invoke(plugin, new object[] { config });
+
     /// <summary>Jellyfin's <c>Plugin.Instance</c> is process-wide, so tests that make a plugin put it back.</summary>
     internal static void ForgetPlugin() => typeof(Plugin).GetProperty(nameof(Plugin.Instance))!.SetValue(null, null);
 

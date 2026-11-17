@@ -89,7 +89,7 @@ public sealed class HostLabelTests
 
         Assert.False(built.Ok);
         Assert.Null(built.Name);
-        Assert.False(string.IsNullOrWhiteSpace(built.Problem));
+        Assert.False(string.IsNullOrWhiteSpace(built.Message));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class HostLabelTests
     {
         var built = HostLabel.Build("abc", "dynu.com");
 
-        Assert.Contains("Public Suffix List", built.Problem);
+        Assert.Contains("Public Suffix List", built.Message);
     }
 
     [Theory]
@@ -109,6 +109,6 @@ public sealed class HostLabelTests
         var built = HostLabel.Build(label, parent);
 
         Assert.False(built.Ok);
-        Assert.Equal(HostLabel.Check(label).Message, built.Problem);
+        Assert.Equal(HostLabel.Check(label).Message, built.Message);
     }
 }

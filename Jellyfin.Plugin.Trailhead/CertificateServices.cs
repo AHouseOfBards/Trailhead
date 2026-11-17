@@ -63,7 +63,19 @@ internal sealed class ServicesOverrides
 
     /// <summary>Replaces the whole manager.</summary>
     internal Func<ICertificateRenewer>? RenewerFactory { get; init; }
+
+    /// <summary>How setup's own Dynu calls behave (attempts, timeout, backoff). Default: 2 attempts of 10 s each.</summary>
+    internal DynuClientOptions? DynuInteractive { get; init; }
+
+    /// <summary>The time one setup request may take in all. Default: 25 s.</summary>
+    internal TimeSpan? SetupBudget { get; init; }
+
+    /// <summary>The string tables setup answers from. Default: the ones embedded in the plugin.</summary>
+    internal Campground.Shared.I18n.Strings? Strings { get; init; }
 }
+
+/// <summary>The last renewal check and when it was made.</summary>
+internal sealed record LastRenewal(RenewalReport Report, DateTimeOffset At);
 
 /// <summary>
 /// Owns the one <see cref="CertificateManager"/> for this Jellyfin's lifetime. It is built on the first renewal, not
@@ -85,6 +97,7 @@ public sealed class CertificateServices : IDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly object _gate = new();
     private Built? _built;
+    private LastRenewal? _last;
     private bool _disposed;
 
     public CertificateServices(IApplicationPaths applicationPaths, ILogger<CertificateServices> logger)
@@ -132,11 +145,20 @@ public sealed class CertificateServices : IDisposable
         using var lease = Acquire(out var report);
         if (lease is null)
         {
-            return report!;
+            return Remember(report!);
         }
 
         var result = await lease.Renewer.ReconcileAsync(false, linked.Token).ConfigureAwait(false);
-        return new RenewalReport(RenewalState.Ran, string.Empty, result);
+        return Remember(new RenewalReport(RenewalState.Ran, string.Empty, result));
+    }
+
+    /// <summary>The last check that finished, for the setup page's status line. Kept in memory only: it is empty after a restart until the startup trigger runs.</summary>
+    internal LastRenewal? LastReport => Volatile.Read(ref _last);
+
+    private RenewalReport Remember(RenewalReport report)
+    {
+        Volatile.Write(ref _last, new LastRenewal(report, (_overrides.Time ?? TimeProvider.System).GetUtcNow()));
+        return report;
     }
 
     /// <summary>The manager for the settings saved now, built if need be. Null (with a report) when there is nothing to renew.</summary>

@@ -47,7 +47,7 @@ public sealed class RenewalRegistrationTests : IDisposable
         var plugin = new Plugin(RenewalTestKit.Paths(_folder.File("jellyfin")), new RenewalTestKit.XmlStub());
         if (config is not null)
         {
-            plugin.UpdateConfiguration(config);
+            RenewalTestKit.SwapConfiguration(plugin, config);
         }
 
         return plugin;
@@ -101,11 +101,11 @@ public sealed class RenewalRegistrationTests : IDisposable
         var none = await services.RenewAsync(CancellationToken.None);
 
         // What an admin's save does: a new configuration object replaces the old one.
-        plugin.UpdateConfiguration(new PluginConfiguration { Hostname = "trailhead-test.example.com" });
+        RenewalTestKit.SwapConfiguration(plugin, new PluginConfiguration { Hostname = "trailhead-test.example.com" });
         var noKey = await services.RenewAsync(CancellationToken.None);
 
         // A key sealed by some other machine's key file: it won't open here, so still nothing to renew.
-        plugin.UpdateConfiguration(new PluginConfiguration { Hostname = "trailhead-test.example.com", DynuKey = RenewalTestKit.Sealed(5, FakeDynu.Key) });
+        RenewalTestKit.SwapConfiguration(plugin, new PluginConfiguration { Hostname = "trailhead-test.example.com", DynuKey = RenewalTestKit.Sealed(5, FakeDynu.Key) });
         var elsewhere = await services.RenewAsync(CancellationToken.None);
 
         Assert.Equal(RenewalState.NotSetUp, none.State);

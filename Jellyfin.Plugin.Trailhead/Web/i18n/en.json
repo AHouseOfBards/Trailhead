@@ -1,0 +1,33 @@
+{
+  "dynuKey.reenter": "Re-enter your Dynu key.",
+
+  "name.kind.ours": "That name is already on your Dynu account. Trailhead will use it.",
+  "name.kind.unchecked": "Trailhead will find out when you press Continue.",
+  "name.kind.claimed": "Your name is set up.",
+  "name.kind.taken": "Someone else has that name. Try it with another ending.",
+  "name.kind.accountFull": "Your Dynu account is full. Delete a name there, then try again.",
+  "name.kind.dynuRefused": "Dynu won't make that name from here. Add it on Dynu's own site and Trailhead will find it.",
+  "name.kind.badKey": "Dynu didn't accept your key. Check it and try again.",
+  "name.kind.unavailable": "Couldn't reach Dynu just now. Try again in a minute.",
+  "name.kind.invalid": "That name can't be used.",
+
+  "label.empty": "Type a name.",
+  "label.tooShort": "Use at least {min} characters.",
+  "label.tooLong": "Use {max} characters or fewer.",
+  "label.hasDot": "Use one word, with no dots.",
+  "label.badCharacters": "Use only letters, numbers and dashes.",
+  "label.edgeDash": "A name can't start or end with a dash.",
+  "label.reservedPrefix": "A name can't start with xn--.",
+  "label.parentNotOffered": "That ending isn't offered.",
+  "label.parentBlocked": "That ending can't be used: {reason}.",
+
+  "error.dynu_key_invalid": "That doesn't look like a Dynu key. Copy it again from API Credentials.",
+  "error.dynu_key_rejected": "Dynu didn't accept that key. Check it and try again.",
+  "error.dynu_key_missing": "Trailhead has no usable Dynu key. Save your key first.",
+  "error.dynu_unavailable": "Couldn't reach Dynu just now. Try again in a minute.",
+  "error.rate_limited": "Too many tries. Wait a minute and try again.",
+  "error.bad_request": "Trailhead couldn't read that request.",
+  "error.request_too_large": "That request is too big.",
+  "error.save_failed": "Couldn't save the setting. Try again.",
+  "error.internal": "Couldn't finish that. Check Jellyfin's log."
+}
