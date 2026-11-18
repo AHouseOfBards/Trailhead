@@ -1,0 +1,127 @@
+<div id="trailheadPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select" data-controller="__plugin/trailhead.js">
+<style>
+    /* Jellyfin's own classes carry the theme. These few colours are ours: good, bad and warn text. Each pair is at
+       least 4.5:1 on its theme's background (dark #101010 and paper #202020, light #f2f2f2 and #e8e8e8, appletv
+       #d5e9f2, from jellyfin-web src/themes); tests/web/page.test.js measures them. The themes that aren't light
+       (blueradiance, purplehaze, wmc, catppuccin) take the dark set. */
+    #trailheadPage {
+        --th-good: #7fe09a;
+        --th-bad: #ff9a9a;
+        --th-warn: #ffd666;
+    }
+    html[data-theme="light"] #trailheadPage,
+    html[data-theme="appletv"] #trailheadPage,
+    html[data-theme="catppuccin-latte"] #trailheadPage {
+        --th-good: #11601f;
+        --th-bad: #a31515;
+        --th-warn: #7a4b00;
+    }
+    #trailheadPage .th-status { font-weight: 600; margin: 0 0 1em; }
+    #trailheadPage .th-good { color: var(--th-good); }
+    #trailheadPage .th-bad { color: var(--th-bad); }
+    #trailheadPage .th-warn { color: var(--th-warn); }
+    #trailheadPage .th-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em 1em; margin: 0 0 0.5em; }
+    #trailheadPage .th-line p { margin: 0; }
+    #trailheadPage .th-row { display: flex; flex-wrap: wrap; gap: 0.5em; margin: 1em 0; }
+    #trailheadPage .th-steps { margin: 0 0 1em 1.5em; padding: 0; }
+    #trailheadPage [hidden] { display: none !important; }
+    #trailheadPage h3:focus { outline: none; }
+    #trailheadPage h3:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+</style>
+<div data-role="content">
+    <div class="content-primary">
+        <h2 class="sectionTitle" data-i18n="page.title">Trailhead</h2>
+        <p id="th-loading" role="status" data-i18n="page.loading">Loading</p>
+        <p id="th-status" class="th-status" role="status" hidden></p>
+
+        <div id="th-done-key" class="th-line" hidden>
+            <p data-i18n="dynuKey.saved">Dynu key saved.</p>
+            <button id="th-change-key" is="emby-button" type="button" class="raised emby-button"><span data-i18n="dynuKey.change">Change key</span></button>
+        </div>
+        <div id="th-done-name" class="th-line" hidden>
+            <p id="th-done-name-text"></p>
+            <button id="th-change-name" is="emby-button" type="button" class="raised emby-button"><span data-i18n="name.change">Change name</span></button>
+        </div>
+
+        <p id="th-notice" role="status" hidden></p>
+        <p id="th-error" class="th-bad" role="alert" hidden></p>
+
+        <section id="th-step-dynu" hidden>
+            <h3 id="th-heading-dynu" class="sectionTitle" tabindex="-1" data-i18n="dynuKey.heading">Dynu account</h3>
+            <p id="th-reenter" class="th-warn" hidden data-i18n="dynuKey.reenter">Re-enter your Dynu key.</p>
+            <ol class="th-steps">
+                <li data-i18n="dynuKey.step1">Create a Dynu account and confirm the email.</li>
+                <li data-i18n="dynuKey.step2">Open API Credentials in Dynu.</li>
+                <li data-i18n="dynuKey.step3">Copy the API key.</li>
+                <li data-i18n="dynuKey.step4">Paste it here.</li>
+            </ol>
+            <div class="th-row">
+                <button id="th-dynu-create" is="emby-button" type="button" class="raised emby-button"><span data-i18n="dynuKey.create">Create a Dynu account</span></button>
+                <button id="th-dynu-have" is="emby-button" type="button" class="raised emby-button"><span data-i18n="dynuKey.haveAccount">I have an account</span></button>
+            </div>
+            <p id="th-dynu-blocked" class="th-warn" hidden>
+                <span data-i18n="dynuKey.blocked">Your browser blocked the window.</span>
+                <a id="th-dynu-link" target="_blank" rel="noopener noreferrer" data-i18n="dynuKey.openLink">Open Dynu here</a>
+            </p>
+            <p id="th-dynu-wait" role="status" hidden></p>
+            <form id="th-key-form" autocomplete="off">
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="th-key" data-i18n="dynuKey.keyLabel">Dynu API key</label>
+                    <input id="th-key" is="emby-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="256" />
+                </div>
+                <div class="th-row">
+                    <button id="th-key-save" is="emby-button" type="submit" class="raised button-submit emby-button"><span data-i18n="dynuKey.save">Save</span></button>
+                    <button id="th-key-cancel" is="emby-button" type="button" class="raised emby-button" hidden><span data-i18n="page.cancel">Cancel</span></button>
+                </div>
+            </form>
+        </section>
+
+        <section id="th-step-name" hidden>
+            <h3 id="th-heading-name" class="sectionTitle" tabindex="-1" data-i18n="name.heading">Name</h3>
+            <p id="th-rename-note" hidden data-i18n="name.renameNote">The old name stays on your Dynu account.</p>
+            <form id="th-name-form" autocomplete="off">
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="th-label" data-i18n="name.labelLabel">Name</label>
+                    <input id="th-label" is="emby-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="63" />
+                </div>
+                <div class="selectContainer">
+                    <label class="selectLabel" for="th-parent" data-i18n="name.parentLabel">Ending</label>
+                    <select id="th-parent" is="emby-select"></select>
+                </div>
+                <p id="th-check" role="status"></p>
+                <div class="th-row">
+                    <button id="th-continue" is="emby-button" type="submit" class="raised button-submit emby-button"><span data-i18n="name.continue">Continue</span></button>
+                    <button id="th-name-cancel" is="emby-button" type="button" class="raised emby-button" hidden><span data-i18n="page.cancel">Cancel</span></button>
+                </div>
+            </form>
+            <div id="th-result" role="status">
+                <p id="th-result-text"></p>
+                <div id="th-alts" hidden>
+                    <p data-i18n="name.alternatives">Try another ending:</p>
+                    <div id="th-alt-buttons" class="th-row"></div>
+                </div>
+                <div id="th-full" hidden>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="th-full-name" data-i18n="name.fullName">Full name</label>
+                        <input id="th-full-name" is="emby-input" type="text" readonly />
+                    </div>
+                    <div class="th-row">
+                        <button id="th-copy" is="emby-button" type="button" class="raised emby-button"><span data-i18n="name.copy">Copy</span></button>
+                        <button id="th-add-open" is="emby-button" type="button" class="raised emby-button"><span data-i18n="name.openAdd">Add the name on Dynu</span></button>
+                        <button id="th-recheck" is="emby-button" type="button" class="raised emby-button"><span data-i18n="name.checkAgain">Check again</span></button>
+                    </div>
+                </div>
+                <div id="th-panel" hidden>
+                    <div class="th-row">
+                        <button id="th-panel-open" is="emby-button" type="button" class="raised emby-button"><span data-i18n="name.openPanel">Open Dynu to delete a name</span></button>
+                    </div>
+                </div>
+                <p id="th-panel-blocked" class="th-warn" hidden>
+                    <span data-i18n="dynuKey.blocked">Your browser blocked the window.</span>
+                    <a id="th-panel-link" target="_blank" rel="noopener noreferrer" data-i18n="dynuKey.openLink">Open Dynu here</a>
+                </p>
+            </div>
+        </section>
+    </div>
+</div>
+</div>
