@@ -60,6 +60,9 @@ internal sealed class FakeDynu : IAsyncDisposable
 
     internal DeleteMissingAs DeleteMissing { get; set; } = DeleteMissingAs.Envelope501;
 
+    /// <summary>How long GET /v2/dns takes to answer. A race between two callers needs a window to happen in.</summary>
+    internal TimeSpan ListDelay { get; set; }
+
     /// <summary>Runs after a TXT record is stored, before the answer is sent (the Pebble tests write it through to challtestsrv here).</summary>
     internal Func<FakeDynuRecord, Task>? OnTxtAdded { get; set; }
 
@@ -330,6 +333,11 @@ internal sealed class FakeDynu : IAsyncDisposable
 
     private async Task ListAsync(HttpContext ctx)
     {
+        if (ListDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(ListDelay).ConfigureAwait(false);
+        }
+
         object[] domains;
         lock (_gate)
         {

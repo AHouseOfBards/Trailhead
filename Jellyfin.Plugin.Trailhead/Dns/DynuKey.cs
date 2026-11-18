@@ -9,7 +9,7 @@ namespace Jellyfin.Plugin.Trailhead.Dns;
 internal sealed class DynuKey
 {
     /// <summary>What to show when the saved value can't be used. Not a failure: the owner types the key again.</summary>
-    internal const string ReenterMessage = "Re-enter your Dynu key.";
+    internal static string ReenterMessage => UiText.English("dynuKey.reenter");
 
     // Binds the sealed value to this setting, so a sealed value copied from another place won't open here.
     private const string AssociatedData = "trailhead:dynu";

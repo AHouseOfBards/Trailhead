@@ -1,3 +1,4 @@
+using Campground.Shared.I18n;
 using Jellyfin.Plugin.Trailhead.Acme;
 using Microsoft.Extensions.Logging;
 
@@ -30,7 +31,10 @@ internal enum ClaimKind
     Invalid,
 }
 
-internal sealed record NameClaim(ClaimKind Kind, string Message, string? Name = null, DynuDomain? Domain = null, IReadOnlyList<string>? Alternatives = null, int Status = 0, string? DynuType = null);
+/// <param name="Message">The English text. A caller that translates uses <see cref="NameClaimer.Describe"/> with the kind and problem.</param>
+/// <param name="Problem">For <see cref="ClaimKind.Invalid"/>: which rule the label or parent broke.</param>
+/// <param name="Reason">For <see cref="LabelProblem.ParentBlocked"/>: why the parent is refused.</param>
+internal sealed record NameClaim(ClaimKind Kind, string Message, string? Name = null, DynuDomain? Domain = null, IReadOnlyList<string>? Alternatives = null, int Status = 0, string? DynuType = null, LabelProblem Problem = LabelProblem.None, string? Reason = null);
 
 /// <summary>
 /// Checks and claims a hostname under one of the offered parents. It gives a result, never an exception (except for a
@@ -41,12 +45,31 @@ internal sealed class NameClaimer
     private readonly DynuClient _dynu;
     private readonly ParentDomains _parents;
     private readonly ILogger _logger;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<DynuDomain>>> _listForCheck;
 
-    internal NameClaimer(DynuClient dynu, ParentDomains parents, ILogger logger)
+    /// <param name="listForCheck">How a check reads the account's names (setup caches it). A claim always asks Dynu itself.</param>
+    internal NameClaimer(DynuClient dynu, ParentDomains parents, ILogger logger, Func<CancellationToken, Task<IReadOnlyList<DynuDomain>>>? listForCheck = null)
     {
         _dynu = dynu;
         _parents = parents;
         _logger = logger;
+        _listForCheck = listForCheck ?? dynu.ListDomainsAsync;
+    }
+
+    /// <summary>The string-table key for what a kind says, e.g. <c>name.kind.accountFull</c>.</summary>
+    internal static string KeyFor(ClaimKind kind) => "name.kind." + char.ToLowerInvariant(kind.ToString()[0]) + kind.ToString()[1..];
+
+    /// <summary>The words for an answer in one language. An invalid label or parent says which rule it broke.</summary>
+    internal static string Describe(Strings strings, ClaimKind kind, LabelProblem problem, string? reason, string? language)
+        => kind == ClaimKind.Invalid && problem != LabelProblem.None
+            ? HostLabel.Describe(strings, problem, reason, language)
+            : strings.Get(KeyFor(kind), language);
+
+    /// <summary>The Invalid answer when the label or parent can't be used, or null when both can. Nothing goes to Dynu either way.</summary>
+    internal static NameClaim? Validate(string? label, string? parent, ParentDomains parents)
+    {
+        var built = HostLabel.Build(label, parent, parents);
+        return built.Ok ? null : Invalid(built);
     }
 
     /// <summary>
@@ -58,22 +81,22 @@ internal sealed class NameClaimer
         var built = HostLabel.Build(label, parent, _parents);
         if (!built.Ok)
         {
-            return Invalid(built.Problem!);
+            return Invalid(built);
         }
 
         var name = built.Name!;
         var parentName = ParentDomains.Normalize(parent);
         try
         {
-            var ours = (await _dynu.ListDomainsAsync(ct).ConfigureAwait(false)).FirstOrDefault(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var ours = (await _listForCheck(ct).ConfigureAwait(false)).FirstOrDefault(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             if (ours is not null)
             {
-                return Done(ClaimKind.Ours, "That name is already on your Dynu account. Trailhead will use it.", name, parentName, domain: ours);
+                return Done(ClaimKind.Ours, name, parentName, domain: ours);
             }
 
             // No getroot: live, it answered 501 for every name not on this account, www.freeddns.org (held elsewhere)
             // included, so it can't tell taken from free. Only the create says, with 505 for taken.
-            return Done(ClaimKind.Unchecked, "Trailhead will find out when you press Continue.", name, parentName);
+            return Done(ClaimKind.Unchecked, name, parentName);
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -87,7 +110,7 @@ internal sealed class NameClaimer
         var built = HostLabel.Build(label, parent, _parents);
         if (!built.Ok)
         {
-            return Invalid(built.Problem!);
+            return Invalid(built);
         }
 
         var name = built.Name!;
@@ -96,8 +119,8 @@ internal sealed class NameClaimer
         {
             var result = await _dynu.CreateDomainAsync(name, ct).ConfigureAwait(false);
             return result.Created
-                ? Done(ClaimKind.Claimed, "Your name is set up.", name, parentName, domain: result.Domain)
-                : Done(ClaimKind.Ours, "That name is already on your Dynu account. Trailhead will use it.", name, parentName, domain: result.Domain);
+                ? Done(ClaimKind.Claimed, name, parentName, domain: result.Domain)
+                : Done(ClaimKind.Ours, name, parentName, domain: result.Domain);
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -105,18 +128,17 @@ internal sealed class NameClaimer
         }
     }
 
-    private const string TakenMessage = "Someone else has that name. Try it with another ending.";
-
     private IReadOnlyList<string> Alternatives(string label, string parent)
         => _parents.Others(parent).Select(p => label + "." + p.Name).ToList();
 
-    private static NameClaim Invalid(string problem) => new(ClaimKind.Invalid, problem);
+    private static NameClaim Invalid(BuiltName built)
+        => new(ClaimKind.Invalid, built.Message ?? UiText.English(KeyFor(ClaimKind.Invalid)), Problem: built.Problem, Reason: built.Reason);
 
-    private NameClaim Done(ClaimKind kind, string message, string name, string parent, DynuDomain? domain = null, IReadOnlyList<string>? alternatives = null)
+    private NameClaim Done(ClaimKind kind, string name, string parent, DynuDomain? domain = null)
     {
         // The kind and the parent only: the name is the user's own public address, and nothing here needs it in a log.
         _logger.LogInformation("Trailhead name check under {Parent}: {Kind}.", parent, kind);
-        return new NameClaim(kind, message, name, domain, alternatives);
+        return new NameClaim(kind, UiText.English(KeyFor(kind)), name, domain);
     }
 
     // How a Dynu answer maps to a kind. 501 and 505 are Dynu's own codes (they describe the request, so there is no
@@ -128,7 +150,6 @@ internal sealed class NameClaimer
         var status = 0;
         string? type = null;
         ClaimKind kind;
-        string message;
         if (error is DynuException d)
         {
             status = d.Status;
@@ -136,46 +157,37 @@ internal sealed class NameClaimer
             if (d.AuthRejected)
             {
                 kind = ClaimKind.BadKey;
-                message = "Dynu didn't accept your key. Check it and try again.";
             }
             else if (d.Kind == FailureKind.Transient)
             {
                 kind = ClaimKind.Unavailable;
-                message = UnavailableMessage;
             }
             else if (d.FromEnvelope && d.Status == 503)
             {
                 kind = ClaimKind.AccountFull;
-                message = "Your Dynu account is full. Delete a name there, then try again.";
             }
             else if (d.Status == 505)
             {
                 kind = ClaimKind.Taken;
-                message = TakenMessage;
             }
             else if (d.Status == 501)
             {
                 kind = ClaimKind.DynuRefused;
-                message = "Dynu won't make that name from here. Add it on Dynu's own site and Trailhead will find it.";
             }
             else
             {
                 kind = ClaimKind.Unavailable;
-                message = UnavailableMessage;
             }
         }
         else
         {
             // Not from Dynu's side of the wire; the type is all the log gets, since a message could carry anything.
             kind = ClaimKind.Unavailable;
-            message = UnavailableMessage;
             _logger.LogWarning("Trailhead name check failed with {ErrorType}.", error.GetType().Name);
         }
 
         _logger.LogInformation("Trailhead name check under {Parent}: {Kind} (Dynu status {Status}).", parent, kind, status);
         var alternatives = kind == ClaimKind.Taken && label is not null ? Alternatives(label, parent) : null;
-        return new NameClaim(kind, message, name, null, alternatives, status, type);
+        return new NameClaim(kind, UiText.English(KeyFor(kind)), name, null, alternatives, status, type);
     }
-
-    private const string UnavailableMessage = "Couldn't reach Dynu just now. Try again in a minute.";
 }

@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Dns\parent-domains.json" LogicalName="parent-domains.json" />
+    <!-- One table per language: copy en.json to <code>.json and translate it, and this picks it up. -->
+    <EmbeddedResource Include="Web\i18n\*.json" LogicalName="Trailhead.i18n.%(Filename).json" />
   </ItemGroup>
 
   <ItemGroup>
