@@ -9,7 +9,7 @@ namespace Jellyfin.Plugin.Trailhead;
 /// <summary>
 /// Trailhead: remote access for Jellyfin in one guided setup.
 /// </summary>
-public class Plugin : BasePlugin<PluginConfiguration>
+public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     /// <summary>Never changes: Jellyfin and the catalog match installs and updates on it.</summary>
     internal const string IdText = "e88e0913-0a07-4904-bcdc-80f925458cac";
@@ -30,6 +30,33 @@ public class Plugin : BasePlugin<PluginConfiguration>
     public override Guid Id => Guid.Parse(IdText);
 
     public override string Description => "Remote access for Jellyfin: a web address, a certificate, the router and Jellyfin's own settings, in one guided setup.";
+
+    /// <summary>
+    /// The setup page and its script. jellyfin-web fetches the script as <c>configurationpage?name=trailhead.js</c>
+    /// from the page's <c>data-controller="__plugin/trailhead.js"</c>, so that name has to be registered here too.
+    /// Both are served without a login (<c>DashboardController.GetDashboardConfigurationPage</c>), so neither holds
+    /// anything but code and English text.
+    /// </summary>
+    public IEnumerable<PluginPageInfo> GetPages()
+    {
+        var space = GetType().Namespace;
+        return new[]
+        {
+            new PluginPageInfo
+            {
+                Name = "Trailhead",
+                DisplayName = "Trailhead",
+                EmbeddedResourcePath = space + ".Web.trailhead.html",
+                EnableInMainMenu = true,
+                MenuIcon = "hiking",
+            },
+            new PluginPageInfo
+            {
+                Name = "trailhead.js",
+                EmbeddedResourcePath = space + ".Web.trailhead.js",
+            },
+        };
+    }
 
     /// <summary>
     /// Jellyfin's generic save (<c>POST /Plugins/{id}/Configuration</c>) lands here. It copies the posted values onto

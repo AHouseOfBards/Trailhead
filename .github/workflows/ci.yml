@@ -30,6 +30,10 @@ jobs:
           dotnet-version: |
             9.0.x
             10.0.x
+      - uses: actions/setup-node@v4
+        # tests/gate.conf's web step runs the setup page's tests with `node --test`. 24 (Krypton) is an LTS line, and it is the one the tests were run on locally; 26 is the newest LTS.
+        with:
+          node-version: '24'
       - uses: actions/setup-go@v5
         # tests/pebble.sh builds Pebble and its challenge server with `go install` (the gate's Pebble step).
         with:
