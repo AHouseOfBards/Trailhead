@@ -92,13 +92,14 @@ internal sealed class ApiHost : IAsyncDisposable
 
     internal IServiceProvider Services => _app.Services;
 
-    internal static async Task<ApiHost> StartAsync(SetupService setup, ILogger log)
+    internal static async Task<ApiHost> StartAsync(SetupService setup, ILogger log, HealthServices? health = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(new ListLoggerProvider(log));
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSingleton(setup);
+        builder.Services.AddSingleton(health ?? new HealthServices(log, () => throw new InvalidOperationException("No address sync in this host."), () => throw new InvalidOperationException("No health service in this host."), new Jellyfin.Plugin.Trailhead.Edge.PhoneTest()));
         builder.Services.AddSingleton(new Jellyfin.Plugin.Trailhead.Edge.EdgeIdentity());
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(Plugin).Assembly)
@@ -271,7 +272,8 @@ public abstract class ApiTestBase : IAsyncLifetime
             Strings = StringsOverride,
         };
         Setup = MakeSetup(overrides, Certificates);
-        Host = await ApiHost.StartAsync(Setup, Log).ConfigureAwait(false);
+        Health = MakeHealth();
+        Host = await ApiHost.StartAsync(Setup, Log, Health).ConfigureAwait(false);
     }
 
     public async Task DisposeAsync()
@@ -284,12 +286,45 @@ public abstract class ApiTestBase : IAsyncLifetime
         }
 
         Setup.Dispose();
+        Health.Dispose();
         RenewalTestKit.ForgetPlugin();
         Folder.Dispose();
     }
 
     internal virtual SetupService MakeSetup(ServicesOverrides overrides, CertificateServices? certificates)
         => new(Log, overrides, null, certificates);
+
+    internal HealthServices Health { get; private set; } = null!;
+
+    internal Jellyfin.Plugin.Trailhead.Edge.PhoneTest Phone { get; } = new();
+
+    internal Jellyfin.Plugin.Trailhead.Tests.Health.RecordingSink Alerts { get; } = new();
+
+    /// <summary>The health routes' service: the saved config, nothing set up beyond it, the outside check off.</summary>
+    internal virtual HealthServices MakeHealth()
+        => new(
+            Log,
+            () => throw new InvalidOperationException("The API tests don't sync addresses."),
+            () => new Jellyfin.Plugin.Trailhead.Health.HealthService(
+                new Jellyfin.Plugin.Trailhead.Health.HealthEnvironment
+                {
+                    Config = ConfigGate.Read,
+                    HasCertificate = () => false,
+                    Edge = () => null,
+                    Gate = () => null,
+                    StoredThumbprint = () => null,
+                    Drift = () => Array.Empty<Jellyfin.Plugin.Trailhead.Settings.DriftItem>(),
+                    Forwards = () => Array.Empty<Jellyfin.Plugin.Trailhead.Router.ForwardRecord>(),
+                    Leases = () => null,
+                    Sync = () => null,
+                    Outside = new Jellyfin.Plugin.Trailhead.Health.OutsideCheckSwitch(new Jellyfin.Plugin.Trailhead.Tests.Health.CountingCheck(), () => Config.OutsideCheckAllowed),
+                    Phone = Phone,
+                    Alerts = Alerts,
+                    Folder = () => Folder.File("health"),
+                    HashKey = new byte[32],
+                },
+                Log),
+            Phone);
 
     /// <summary>Saves the fake key sealed, as a finished key step would have.</summary>
     internal void SeedKey(string plain = Sentinel) => ConfigGate.Update(c => c.DynuKey = new DynuKey(Box).Seal(plain));

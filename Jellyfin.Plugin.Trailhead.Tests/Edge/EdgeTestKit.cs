@@ -193,12 +193,12 @@ internal static class EdgeCerts
     /// <summary>Every intermediate Edge's tests make has a name starting with this.</summary>
     internal const string IntermediatePrefix = "Trailhead Edge Test Intermediate ";
 
-    internal static StoredCertificate Make(string name = "trailhead-test.example.com")
+    internal static StoredCertificate Make(string name = "trailhead-test.example.com", DateTimeOffset? notBefore = null, DateTimeOffset? notAfter = null)
     {
         // A name of its own each time: on Windows the TLS context puts the intermediate in the user's CA store
         // (seen: 101 "Test Intermediate R1" there after a few runs, each with a different key), and Windows' chain
         // builder then failed every other test's chain with "An unknown chain building error occurred".
-        var (pem, key, _) = TestPki.Issue(name, "Test Root X1", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(60), intermediateCn: IntermediatePrefix + Guid.NewGuid().ToString("N"));
+        var (pem, key, _) = TestPki.Issue(name, "Test Root X1", notBefore ?? DateTimeOffset.UtcNow.AddDays(-1), notAfter ?? DateTimeOffset.UtcNow.AddDays(60), intermediateCn: IntermediatePrefix + Guid.NewGuid().ToString("N"));
         var certs = new List<X509Certificate2>();
         var span = pem.AsSpan();
         while (PemEncoding.TryFind(span, out var fields))
@@ -326,6 +326,14 @@ internal sealed class EdgeRig : IAsyncDisposable
     /// <summary>The live options Edge reads. Default: the stand-in's own, the ones it really applies.</summary>
     internal Func<ForwardedHeadersOptions?>? Live { get; set; }
 
+    /// <summary>The phone test Edge answers (null: none).</summary>
+    internal Jellyfin.Plugin.Trailhead.Edge.PhoneTest? Phone { get; set; }
+
+    internal Jellyfin.Plugin.Trailhead.Health.PublicAddressWatch? Watch { get; set; }
+
+    /// <summary>Which client addresses count as home. Null: Edge's own default (everything is home).</summary>
+    internal Func<IPAddress, bool>? IsHome { get; set; }
+
     internal int Port => Service?.Port ?? throw new InvalidOperationException("Edge isn't running.");
 
     internal static async Task<EdgeRig> StartAsync(string[]? knownProxies = null)
@@ -349,23 +357,38 @@ internal sealed class EdgeRig : IAsyncDisposable
             Throttle = throttle ?? new ThrottleOptions(),
         };
 
-    internal EdgeEnvironment Environment() => new()
+    internal EdgeEnvironment Environment()
     {
-        Config = () => Config,
-        JellyfinPort = () => Jellyfin.Port,
-        BaseUrl = () => string.Empty,
-        Forwarding = () => Forwarding,
-        Live = () => (Live ?? (() => Jellyfin.Options))(),
-        Version = () => FakeJellyfin.Version,
-        Certificate = () => Certificate,
-        HasCertificate = () => Certificate is not null,
-    };
+        var env = new EdgeEnvironment
+        {
+            Config = () => Config,
+            JellyfinPort = () => Jellyfin.Port,
+            BaseUrl = () => string.Empty,
+            Forwarding = () => Forwarding,
+            Live = () => (Live ?? (() => Jellyfin.Options))(),
+            Version = () => FakeJellyfin.Version,
+            Certificate = () => Certificate,
+            HasCertificate = () => Certificate is not null,
+        };
+        return IsHome is { } home ? new EdgeEnvironment
+        {
+            Config = env.Config,
+            JellyfinPort = env.JellyfinPort,
+            BaseUrl = env.BaseUrl,
+            Forwarding = env.Forwarding,
+            Live = env.Live,
+            Version = env.Version,
+            Certificate = env.Certificate,
+            HasCertificate = env.HasCertificate,
+            IsHome = home,
+        } : env;
+    }
 
     /// <summary>Builds the service, runs StartAsync and ApplicationStarted, and waits for Edge's start (and first gate check).</summary>
     internal async Task<EdgeService> StartEdgeAsync(EdgeOptions? options = null)
     {
         Lifetime = new DrivenLifetime();
-        Service = new EdgeService(_loggers, Lifetime, Identity, Ports, null, Environment, options ?? Options(), TimeProvider.System);
+        Service = new EdgeService(_loggers, Lifetime, Identity, Ports, null, Environment, options ?? Options(), TimeProvider.System, Phone, Watch);
         await Service.StartAsync(CancellationToken.None).ConfigureAwait(false);
         Lifetime.Start();
         await Service.StartTask.ConfigureAwait(false);

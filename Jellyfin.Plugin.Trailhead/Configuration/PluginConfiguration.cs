@@ -35,4 +35,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     [TrailheadOwned]
     public string NameCreatedByTrailhead { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The admin lets Trailhead ask check-host.net to connect to the name from outside (T9, T17). Off by default, and
+    /// it does nothing until the code's own <c>OutsideCheckSwitch.CheckHostTermsConfirmed</c> is on too (plan-finish
+    /// choice 1): the checker publishes a report page with the name for every check.
+    /// </summary>
+    public bool OutsideCheckAllowed { get; set; }
 }

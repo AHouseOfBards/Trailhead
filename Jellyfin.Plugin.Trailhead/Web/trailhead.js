@@ -40,7 +40,7 @@ export const FALLBACK = Object.freeze({
 });
 
 const ERROR_CODES = ['dynu_key_invalid', 'dynu_key_rejected', 'dynu_key_missing', 'dynu_unavailable', 'rate_limited',
-    'bad_request', 'request_too_large', 'save_failed', 'internal'];
+    'bad_request', 'request_too_large', 'save_failed', 'not_set_up', 'internal'];
 
 // ---------------------------------------------------------------- pure helpers
 

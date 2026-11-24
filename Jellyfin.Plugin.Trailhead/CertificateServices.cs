@@ -192,6 +192,30 @@ public sealed class CertificateServices : IDisposable
         return new CertificateStore(folder, _overrides.Time ?? TimeProvider.System, _logger).LoadForServing();
     }
 
+    /// <summary>The thumbprint of the certificate the store holds now, read without its key; null when there is none.</summary>
+    internal string? StoredThumbprint()
+    {
+        var folder = CertificateFolder();
+        if (!CertificateStore.HasCurrent(folder))
+        {
+            return null;
+        }
+
+        var stored = new CertificateStore(folder, _overrides.Time ?? TimeProvider.System, _logger).Load();
+        if (stored is null)
+        {
+            return null;
+        }
+
+        var thumb = stored.Leaf.Thumbprint;
+        foreach (var c in stored.Chain)
+        {
+            c.Dispose();
+        }
+
+        return thumb;
+    }
+
     private void RaiseIssued()
     {
         try

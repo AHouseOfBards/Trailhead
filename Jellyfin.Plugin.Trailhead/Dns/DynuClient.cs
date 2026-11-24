@@ -1,5 +1,8 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jellyfin.Plugin.Trailhead.Acme;
 using Microsoft.Extensions.Logging;
 
@@ -8,6 +11,43 @@ namespace Jellyfin.Plugin.Trailhead.Dns;
 internal sealed record DynuDomain(long Id, string Name);
 
 internal sealed record DynuCreateResult(DynuDomain Domain, bool Created);
+
+/// <summary>A name's writable fields as Dynu held them when read. Never holds the update token.</summary>
+internal sealed class DynuHeldRecord
+{
+    /// <summary>The writable fields of Dynu's <c>DNS.domain</c> schema (its OpenAPI document; the rest are read-only).</summary>
+    internal static readonly IReadOnlyList<string> Writable = new[]
+    {
+        "name", "group", "ipv4Address", "ipv6Address", "ttl", "ipv4", "ipv6", "ipv4WildcardAlias", "ipv6WildcardAlias", "allowZoneTransfer", "dnssec",
+    };
+
+    internal DynuHeldRecord(long id, JsonObject fields)
+    {
+        Id = id;
+        Fields = fields;
+    }
+
+    internal long Id { get; }
+
+    internal JsonObject Fields { get; }
+
+    internal string Name => Fields["name"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : string.Empty;
+
+    /// <summary>The A record's address when the IPv4 switch is on; null when it is off or empty.</summary>
+    internal IPAddress? PublishedIPv4
+    {
+        get
+        {
+            if (Fields["ipv4"] is not JsonValue on || !on.TryGetValue<bool>(out var enabled) || !enabled)
+            {
+                return null;
+            }
+
+            var text = Fields["ipv4Address"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+            return IPAddress.TryParse(text, out var a) && a.AddressFamily == AddressFamily.InterNetwork ? a : null;
+        }
+    }
+}
 
 internal sealed class DynuClientOptions
 {
@@ -162,6 +202,66 @@ internal sealed class DynuClient : IDisposable
         catch (DynuException e) when (e.Status is 404 or 501)
         {
             _logger.LogInformation("Dynu record {RecordId} on domain {DomainId} was already gone.", recordId, domainId);
+        }
+    }
+
+    /// <summary>
+    /// The name's record as Dynu holds it now (<c>GET /v2/dns/{id}</c>), not a copy kept here (A3). Only the fields
+    /// Dynu's schema lets a caller write are kept, so the update can send them back as they were; the per-hostname
+    /// token in the same answer is never copied.
+    /// </summary>
+    internal async Task<DynuHeldRecord> GetDomainAsync(long domainId, CancellationToken ct)
+    {
+        RequireId(domainId, "domain");
+        using var doc = await SendAsync(HttpMethod.Get, $"dns/{domainId}", null, ct).ConfigureAwait(false);
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new DynuException(FailureKind.Transient, $"Dynu GET dns/{domainId} gave no record.");
+        }
+
+        var root = doc.RootElement;
+        var held = new JsonObject();
+        foreach (var field in DynuHeldRecord.Writable)
+        {
+            if (root.TryGetProperty(field, out var value))
+            {
+                held[field] = JsonNode.Parse(value.GetRawText());
+            }
+        }
+
+        // Without the name and both switches there is nothing safe to send back: a field left out may be reset.
+        if (!root.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String
+            || !root.TryGetProperty("ipv4", out var v4) || v4.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !root.TryGetProperty("ipv6", out var v6) || v6.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new DynuException(FailureKind.Permanent, $"Dynu GET dns/{domainId} gave a record without its name or address switches.");
+        }
+
+        return new DynuHeldRecord(domainId, held);
+    }
+
+    /// <summary>
+    /// Points the name's A record at <paramref name="ipv4"/> (<c>POST /v2/dns/{id}</c>: Dynu's OpenAPI document,
+    /// operation <c>dnsIdPost</c>, body <c>DNS.domain</c>). Every other field goes back exactly as
+    /// <see cref="GetDomainAsync"/> read it, the AAAA switch and address too, so an AAAA the admin set stays and
+    /// Trailhead never sends an IPv6 address of its own (T12, plan-finish choice 2). The schema doesn't say whether a
+    /// field left out is kept or reset, which is why nothing is left out.
+    /// UNVERIFIED LIVE: built from Dynu's OpenAPI document and FakeDynu (plan-finish choice 7). Check it against a real
+    /// account before release.
+    /// </summary>
+    internal async Task UpdateIPv4Async(DynuHeldRecord held, IPAddress ipv4, CancellationToken ct)
+    {
+        RequireId(held.Id, "domain");
+        if (ipv4.AddressFamily != AddressFamily.InterNetwork)
+        {
+            throw new DynuException(FailureKind.Permanent, "Refusing to send Dynu an address that isn't IPv4.");
+        }
+
+        var body = (JsonObject)held.Fields.DeepClone();
+        body["ipv4"] = true;
+        body["ipv4Address"] = ipv4.ToString();
+        using (await SendAsync(HttpMethod.Post, $"dns/{held.Id}", body, ct).ConfigureAwait(false))
+        {
         }
     }
 

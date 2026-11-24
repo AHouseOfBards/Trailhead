@@ -44,6 +44,7 @@ internal sealed class FakeDynu : IAsyncDisposable
     private readonly Queue<FakeDynuCanned> _canned = new();
     private readonly Queue<FakeDynuCanned> _createScript = new();
     private readonly HashSet<string> _foreign = new();
+    private readonly Dictionary<long, System.Text.Json.Nodes.JsonObject> _held = new();
     private long _nextDomain = 1000;
     private long _nextRecord = 5000;
 
@@ -112,6 +113,125 @@ internal sealed class FakeDynu : IAsyncDisposable
             _domains.Add((id, name));
             return id;
         }
+    }
+
+    /// <summary>
+    /// The writable fields of a name as this fake holds them (the <c>DNS.domain</c> schema in Dynu's OpenAPI
+    /// document). A name added without them gets what Dynu shows for a name made with no address.
+    /// </summary>
+    internal System.Text.Json.Nodes.JsonObject Held(long id)
+    {
+        lock (_gate)
+        {
+            return (System.Text.Json.Nodes.JsonObject)HeldLocked(id).DeepClone();
+        }
+    }
+
+    /// <summary>Changes a held field behind the client's back, as an edit in Dynu's web panel would.</summary>
+    internal void SetHeld(long id, string field, System.Text.Json.Nodes.JsonNode? value)
+    {
+        lock (_gate)
+        {
+            HeldLocked(id)[field] = value;
+        }
+    }
+
+    /// <summary>The bodies of every POST /v2/dns/{id} (address updates), in order.</summary>
+    internal IReadOnlyList<string> Updates
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _requests.Where(r => r.Method == "POST" && r.Path.Trim('/').Split('/') is { Length: 3 } p && p[1] == "dns" && long.TryParse(p[2], out _)).Select(r => r.Body).ToList();
+            }
+        }
+    }
+
+    private System.Text.Json.Nodes.JsonObject HeldLocked(long id)
+    {
+        if (!_held.TryGetValue(id, out var held))
+        {
+            var name = _domains.Where(d => d.Id == id).Select(d => d.Name).FirstOrDefault() ?? string.Empty;
+            held = new System.Text.Json.Nodes.JsonObject
+            {
+                ["name"] = name,
+                ["group"] = string.Empty,
+                ["ipv4Address"] = null,
+                ["ipv6Address"] = null,
+                ["ttl"] = 90,
+                ["ipv4"] = false,
+                ["ipv6"] = false,
+                ["ipv4WildcardAlias"] = false,
+                ["ipv6WildcardAlias"] = false,
+                ["allowZoneTransfer"] = false,
+                ["dnssec"] = false,
+            };
+            _held[id] = held;
+        }
+
+        return held;
+    }
+
+    private async Task GetDomainAsync(HttpContext ctx, long id)
+    {
+        string body;
+        lock (_gate)
+        {
+            if (!_domains.Any(d => d.Id == id))
+            {
+                body = string.Empty;
+            }
+            else
+            {
+                // The update token and the read-only fields come too, as in the real answer.
+                var answer = (System.Text.Json.Nodes.JsonObject)HeldLocked(id).DeepClone();
+                answer["statusCode"] = 200;
+                answer["id"] = id;
+                answer["token"] = Token;
+                answer["state"] = "Complete";
+                body = answer.ToJsonString();
+            }
+        }
+
+        if (body.Length == 0)
+        {
+            await WriteAsync(ctx, 200, Envelope(501, "Argument Exception", "Argument is invalid.")).ConfigureAwait(false);
+            return;
+        }
+
+        await WriteAsync(ctx, 200, body).ConfigureAwait(false);
+    }
+
+    private async Task UpdateDomainAsync(HttpContext ctx, long id, string body)
+    {
+        System.Text.Json.Nodes.JsonObject? posted = null;
+        try
+        {
+            posted = System.Text.Json.Nodes.JsonNode.Parse(body) as System.Text.Json.Nodes.JsonObject;
+        }
+        catch (JsonException)
+        {
+        }
+
+        var ok = false;
+        lock (_gate)
+        {
+            var name = _domains.Where(d => d.Id == id).Select(d => d.Name).FirstOrDefault();
+            if (posted is not null && name is not null && posted["name"] is System.Text.Json.Nodes.JsonValue n && n.TryGetValue<string>(out var postedName)
+                && postedName.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                var held = HeldLocked(id);
+                foreach (var (key, value) in posted)
+                {
+                    held[key] = value?.DeepClone();
+                }
+
+                ok = true;
+            }
+        }
+
+        await WriteAsync(ctx, 200, ok ? Envelope(200) : Envelope(501, "Argument Exception", "Argument is invalid.")).ConfigureAwait(false);
     }
 
     /// <summary>A name that belongs to another account: it is never listed, and creating it fails with 505.</summary>
@@ -237,6 +357,18 @@ internal sealed class FakeDynu : IAsyncDisposable
             if (parts.Length == 2 && ctx.Request.Method == "POST")
             {
                 await CreateDomainAsync(ctx, body).ConfigureAwait(false);
+                return;
+            }
+
+            if (parts.Length == 3 && ctx.Request.Method == "GET" && long.TryParse(parts[2], out var getId))
+            {
+                await GetDomainAsync(ctx, getId).ConfigureAwait(false);
+                return;
+            }
+
+            if (parts.Length == 3 && ctx.Request.Method == "POST" && long.TryParse(parts[2], out var postId))
+            {
+                await UpdateDomainAsync(ctx, postId, body).ConfigureAwait(false);
                 return;
             }
 

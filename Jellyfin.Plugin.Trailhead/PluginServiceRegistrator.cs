@@ -60,8 +60,16 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             var paths = sp.GetRequiredService<IApplicationPaths>();
             return new PortTable(() => DataFile(paths, "ports.json"), sp.GetRequiredService<Journal>());
         });
+        // The phone test Edge answers and the own-public-address watch: in memory, and empty until used. Before
+        // EdgeService, which looks them up when it is built.
+        serviceCollection.AddSingleton(_ => new PhoneTest());
+        serviceCollection.AddSingleton(_ => new Health.PublicAddressWatch());
         serviceCollection.AddSingleton<EdgeService>();
         serviceCollection.AddSingleton<IHostedService>(EdgeOrNothing);
+
+        // The address sync, the outside check and the health run (M4). Built on first use; AddressSyncTask and
+        // HealthTask are found by the assembly scan.
+        serviceCollection.AddSingleton<HealthServices>();
 
         // The router, the probe and the host firewall. Built on first use, so a broken network can't stop Jellyfin
         // starting; RenewForwardsTask is found by the same scan as RenewCertificateTask.
