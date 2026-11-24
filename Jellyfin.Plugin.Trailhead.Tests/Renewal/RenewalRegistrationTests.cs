@@ -73,14 +73,15 @@ public sealed class RenewalRegistrationTests : IDisposable
     private string[] Snapshot() => Directory.EnumerateFileSystemEntries(_folder.Path, "*", SearchOption.AllDirectories).Order().ToArray();
 
     [Fact]
-    public void Jellyfin_finds_exactly_one_task_in_the_plugin_by_scanning_its_exported_types()
+    public void Jellyfin_finds_exactly_the_plugins_tasks_by_scanning_its_exported_types()
     {
         // ApplicationHost.GetTypes takes GetExportedTypes() and keeps concrete, non-generic classes.
         var found = typeof(Plugin).Assembly.GetExportedTypes()
             .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericType && typeof(IScheduledTask).IsAssignableFrom(t))
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(new[] { typeof(RenewCertificateTask) }, found);
+        Assert.Equal(new[] { typeof(RenewCertificateTask), typeof(RenewForwardsTask) }, found);
     }
 
     [Fact]

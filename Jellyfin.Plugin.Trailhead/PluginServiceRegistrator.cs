@@ -62,6 +62,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         });
         serviceCollection.AddSingleton<EdgeService>();
         serviceCollection.AddSingleton<IHostedService>(EdgeOrNothing);
+
+        // The router, the probe and the host firewall. Built on first use, so a broken network can't stop Jellyfin
+        // starting; RenewForwardsTask is found by the same scan as RenewCertificateTask.
+        serviceCollection.AddSingleton<RouterServices>();
     }
 
     // The host builds every hosted service before it starts any; an exception here would stop Jellyfin's start. So a
