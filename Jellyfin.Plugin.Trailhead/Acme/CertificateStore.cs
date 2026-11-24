@@ -62,6 +62,18 @@ internal sealed class CertificateStore
 
     internal StoredCertificate? LoadPrevious() => Read(Path.Combine(_folder, PreviousName));
 
+    /// <summary>
+    /// The current certificate, loaded so a TLS server can sign with its key. On Windows SChannel can't use an
+    /// ephemeral key (spike T-S1 point 7), so there the key goes in the user key set the way Jellyfin loads its own
+    /// certificate (Emby.Server.Implementations/ApplicationHost.cs:672, v12.4); it is removed again when the
+    /// certificate object goes. Elsewhere it stays ephemeral, so no key file is made at all.
+    /// </summary>
+    internal StoredCertificate? LoadForServing()
+        => Read(Path.Combine(_folder, CurrentName), OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
+
+    /// <summary>True when there is a current certificate file. Reads nothing.</summary>
+    internal static bool HasCurrent(string folder) => File.Exists(Path.Combine(folder, CurrentName));
+
     internal StoreResult Install(string chainPem, RSA key, CertificateExpectation expected)
     {
         lock (_gate)
@@ -252,7 +264,7 @@ internal sealed class CertificateStore
         return result;
     }
 
-    private static StoredCertificate? Read(string path)
+    private static StoredCertificate? Read(string path, X509KeyStorageFlags flags = X509KeyStorageFlags.EphemeralKeySet)
     {
         try
         {
@@ -262,7 +274,7 @@ internal sealed class CertificateStore
             }
 
             // Ephemeral: loading must not leave key files in the account's key store each time we look.
-            var all = X509CertificateLoader.LoadPkcs12Collection(File.ReadAllBytes(path), PfxPassword, X509KeyStorageFlags.EphemeralKeySet);
+            var all = X509CertificateLoader.LoadPkcs12Collection(File.ReadAllBytes(path), PfxPassword, flags);
             var leaf = all.FirstOrDefault(c => c.HasPrivateKey);
             if (leaf is null)
             {

@@ -149,7 +149,59 @@ public sealed class CertificateServices : IDisposable
         }
 
         var result = await lease.Renewer.ReconcileAsync(false, linked.Token).ConfigureAwait(false);
-        return Remember(new RenewalReport(RenewalState.Ran, string.Empty, result));
+        var remembered = Remember(new RenewalReport(RenewalState.Ran, string.Empty, result));
+        if (result.Outcome == ReconcileOutcome.Issued)
+        {
+            RaiseIssued();
+        }
+
+        return remembered;
+    }
+
+    /// <summary>
+    /// Raised after a renewal stored a new certificate, so Edge can serve it (03 §3b, swap safely). A listener that
+    /// throws is logged and ignored: the certificate is stored either way.
+    /// </summary>
+    internal event Action? CertificateIssued;
+
+    /// <summary>The folder the certificate store keeps its files in. Makes Trailhead's data folder if it isn't there.</summary>
+    internal string CertificateFolder()
+    {
+        if (_overrides.DataFolder is { } own)
+        {
+            return Path.Combine(own, "certs");
+        }
+
+        if (_paths is not null)
+        {
+            CampgroundPaths.Initialize(_paths);
+        }
+
+        return Path.Combine(CampgroundPaths.ForPlugin("trailhead"), "staging", "certs");
+    }
+
+    /// <summary>The certificate to serve now, loaded for a TLS server, or null when there is none (or it won't load).</summary>
+    internal StoredCertificate? LoadServing()
+    {
+        var folder = CertificateFolder();
+        if (!CertificateStore.HasCurrent(folder))
+        {
+            return null;
+        }
+
+        return new CertificateStore(folder, _overrides.Time ?? TimeProvider.System, _logger).LoadForServing();
+    }
+
+    private void RaiseIssued()
+    {
+        try
+        {
+            CertificateIssued?.Invoke();
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning("Trailhead's listener couldn't take the new certificate ({Error}); it keeps the one it has.", e.GetType().Name);
+        }
     }
 
     /// <summary>The last check that finished, for the setup page's status line. Kept in memory only: it is empty after a restart until the startup trigger runs.</summary>

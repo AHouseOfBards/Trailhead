@@ -17,6 +17,9 @@ internal static class JournalKinds
     internal const string RouterMapping = "RouterMapping";
     internal const string FirewallRule = "FirewallRule";
     internal const string DnsName = "DnsName";
+
+    /// <summary>A port in Trailhead's reservation table (Edge's listener). Before and written are port numbers.</summary>
+    internal const string PortReservation = "PortReservation";
 }
 
 /// <summary>
