@@ -22,6 +22,10 @@ except the one listed again under Anonymous routes.
 | `POST` | `/trailhead/name/check` | admin | Looks a name up on the Dynu account. Saves nothing. |
 | `POST` | `/trailhead/name/claim` | admin | Creates the name on the Dynu account (or finds it) and saves it as the web address. |
 | `GET` | `/trailhead/strings/{lang}` | admin | The page's text in one language, with fallbacks merged in. |
+| `GET` | `/trailhead/health` | admin | The last health report, and whether it is over an hour old. |
+| `POST` | `/trailhead/health/run` | admin | Runs the health check now and answers its report. |
+| `POST` | `/trailhead/phone-test` | admin | Makes a new phone-test link. The one before stops working. |
+| `GET` | `/trailhead/phone-test` | admin | Where the phone test is. |
 
 ## Anonymous routes
 
@@ -43,6 +47,13 @@ from these:
   `POST /Users/AuthenticateWithQuickConnect` slow down: after 3 failures for one name from one address (or 20 for
   any names from one address), each next try waits, from 1 second doubling to 30. A success clears it. More than a few
   tries waiting at once get `429` with `Retry-After`.
+- Paths under `/.trailhead/` are Trailhead's own and never reach Jellyfin. `GET /.trailhead/phone/{token}` answers a
+  short HTML page while the token from `POST /trailhead/phone-test` is live (15 minutes, one at a time); a request
+  from outside the home network uses it up. Everything else there is `404`. Like every other path, it answers `503`
+  until the self-test passes.
+
+Trailhead also writes to Jellyfin's activity log when a problem with remote access starts, once a day while it lasts,
+and once when it clears.
 
 ## Changed Jellyfin routes
 
@@ -76,6 +87,21 @@ key's account doesn't have the saved name, so the name was cleared.
 `DynuRefused` or `Invalid`. These are answers about the name, not failures. `Alternatives` has up to three other
 endings for a taken name. `Problem` is null, or the rule an invalid name broke. `Message` is the words, translated.
 
+`GET /trailhead/health` and `POST /trailhead/health/run` answer `{ Report, Stale }`. `Report` is null until the
+first run, then `{ CheckedAt, Overall, Checks, PhoneTest, Hairpin, PublicAddressHash }`:
+
+- `Overall` is `ok`, `problem`, `unknown` (something couldn't be checked, so it isn't called OK) or `not_set_up`.
+- `Checks` is `[{ Id, State, Code, Since, Alerting, Facts }]` for `certificate`, `listener`, `settings`, `router`,
+  `address` and `outside`. `State` is `Ok`, `Problem`, `CouldNotTell` or `Off`. `Alerting` is true once a problem
+  has lasted long enough to go to the activity log. `Facts` holds dates, codes and setting names, never addresses.
+- `Hairpin` is `{ LastSeen, Count }` when Trailhead's listener has had connections from this server's own public
+  address (a home device going out and back in through the router), else null.
+- `PublicAddressHash` is a keyed hash of the public address, so a change shows without the address.
+
+`POST /trailhead/phone-test` answers `{ Url, ExpiresAt }`. `GET /trailhead/phone-test` answers
+`{ Status, ExpiresAt, HitAt, Family }`. `Status` is `None`, `Waiting`, `FromHome` (the link was opened from the home
+network, which proves nothing), `Passed` or `Expired`. `Family` is `IPv4` or `IPv6`.
+
 `GET /trailhead/strings/{lang}` answers one flat object of key to text. `lang` is a language tag such as `en` or
 `pt-br`. One that Trailhead has no table for answers in the closest language it has, or English.
 
@@ -95,6 +121,7 @@ come with `Retry-After`.
 | `bad_request` | 400 | The body isn't the JSON the route takes, or `lang` isn't a language tag. |
 | `request_too_large` | 400 | The body is over 4 KB. |
 | `save_failed` | 500 | A setting was written and didn't read back the same. |
+| `not_set_up` | 409 | There is no name yet, so there is nothing to test. |
 | `internal` | 500 | A bug. Jellyfin's log has the type of the error. |
 
 ## Rate limits

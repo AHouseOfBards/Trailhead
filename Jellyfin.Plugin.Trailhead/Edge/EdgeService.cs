@@ -57,6 +57,12 @@ internal sealed class EdgeEnvironment
 
     /// <summary>True when there is a certificate file, without loading it.</summary>
     internal required Func<bool> HasCertificate { get; init; }
+
+    /// <summary>
+    /// True for an address on the home network (Jellyfin's own LAN rule). The default says true for everything, so a
+    /// phone-test hit nobody can place reads "from home, not proof", never a pass.
+    /// </summary>
+    internal Func<IPAddress, bool> IsHome { get; init; } = _ => true;
 }
 
 /// <summary>
@@ -82,6 +88,8 @@ public sealed class EdgeService : IHostedService, IDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly CertificateSlot _slot = new();
     private readonly LoginThrottle _throttle;
+    private readonly PhoneTest? _phone;
+    private readonly Health.PublicAddressWatch? _watch;
 
     private Running? _running;
     private volatile string _notRunning = EdgeNotRunning.NotStarted;
@@ -100,12 +108,16 @@ public sealed class EdgeService : IHostedService, IDisposable
             certificates,
             () => FromJellyfin(services, certificates),
             new EdgeOptions(),
-            TimeProvider.System)
+            TimeProvider.System,
+            services.GetService<PhoneTest>(),
+            services.GetService<Health.PublicAddressWatch>())
     {
     }
 
-    internal EdgeService(ILoggerFactory loggers, IHostApplicationLifetime lifetime, EdgeIdentity identity, PortTable ports, CertificateServices? certificates, Func<EdgeEnvironment> environment, EdgeOptions options, TimeProvider time)
+    internal EdgeService(ILoggerFactory loggers, IHostApplicationLifetime lifetime, EdgeIdentity identity, PortTable ports, CertificateServices? certificates, Func<EdgeEnvironment> environment, EdgeOptions options, TimeProvider time, PhoneTest? phone = null, Health.PublicAddressWatch? watch = null)
     {
+        _phone = phone;
+        _watch = watch;
         _loggers = loggers;
         _logger = loggers.CreateLogger<EdgeService>();
         _lifetime = lifetime;
@@ -126,6 +138,12 @@ public sealed class EdgeService : IHostedService, IDisposable
     internal int? ExtraPort => _running?.Extra?.Port;
 
     internal bool IsRunning => _running is not null;
+
+    /// <summary>Where a check on this machine reaches Edge's main port (loopback), or null while it isn't running.</summary>
+    internal IPEndPoint? LoopbackEndPoint => _running is { } r ? SelfTest.LoopbackOf(_options.ListenAddress, r.Main.Port) : null;
+
+    /// <summary>The phone test Edge answers, when it has one.</summary>
+    internal PhoneTest? Phone => _phone;
 
     internal string NotRunningReason => _running is null ? _notRunning : string.Empty;
 
@@ -267,7 +285,7 @@ public sealed class EdgeService : IHostedService, IDisposable
         var basePath = Campground.Shared.Network.JellyfinNetworkSettings.NormalizeBaseUrl(env.BaseUrl());
         var settings = new ProxySettings(forwarding, jellyfinPort, basePath, _options.ActivityTimeout, _options.RetryAfter);
         var edgeLoggers = new EdgeLoggerFactory(_loggers);
-        var proxy = new EdgeProxy(settings, _identity, () => Gate, _throttle, edgeLoggers, _logger);
+        var proxy = new EdgeProxy(settings, _identity, () => Gate, _throttle, edgeLoggers, _logger, _phone, env.IsHome, _watch);
         Publish(new GateState(false, GateReasons.Checking, _time.GetUtcNow()));
 
         EdgeListener? main = null;
@@ -556,6 +574,14 @@ public sealed class EdgeService : IHostedService, IDisposable
         }
     }
 
+    /// <summary>Home is what Jellyfin calls local, and every address that isn't public.</summary>
+    internal static Func<IPAddress, bool> HomeRule(Func<IPAddress, bool> jellyfinLocal)
+        => ip =>
+        {
+            var plain = ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip;
+            return !Network.PublicAddressLookup.IsPublic(plain) || jellyfinLocal(plain);
+        };
+
     private static EdgeEnvironment FromJellyfin(IServiceProvider services, CertificateServices certificates)
     {
         var host = services.GetRequiredService<IServerApplicationHost>();
@@ -573,6 +599,11 @@ public sealed class EdgeService : IHostedService, IDisposable
             Version = () => host.ApplicationVersionString,
             Certificate = certificates.LoadServing,
             HasCertificate = () => CertificateStore.HasCurrent(certificates.CertificateFolder()),
+
+            // Jellyfin's own LAN rule (NetworkManager.IsInLocalNetwork, src/Jellyfin.Networking/Manager/NetworkManager.cs:1012,
+            // v12.4), and anything that isn't a public address at all: a phone on mobile data arrives from a public one,
+            // so a private source is home (or a VPN into it) even where LocalNetworkSubnets doesn't list its range.
+            IsHome = HomeRule(network.IsInLocalNetwork),
         };
     }
 

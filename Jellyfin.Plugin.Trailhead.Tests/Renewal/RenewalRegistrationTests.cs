@@ -81,7 +81,7 @@ public sealed class RenewalRegistrationTests : IDisposable
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(new[] { typeof(RenewCertificateTask), typeof(RenewForwardsTask) }, found);
+        Assert.Equal(new[] { typeof(AddressSyncTask), typeof(HealthTask), typeof(RenewCertificateTask), typeof(RenewForwardsTask) }, found);
     }
 
     [Fact]

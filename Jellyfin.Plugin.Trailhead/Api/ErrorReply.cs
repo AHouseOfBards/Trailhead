@@ -19,6 +19,7 @@ internal static class ApiCodes
     internal const string BadRequest = "bad_request";
     internal const string RequestTooLarge = "request_too_large";
     internal const string SaveFailed = "save_failed";
+    internal const string NotSetUp = "not_set_up";
     internal const string Internal = "internal";
 }
 

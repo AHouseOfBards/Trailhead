@@ -106,6 +106,26 @@ public sealed class RouterServices : IDisposable
         }
     }
 
+    /// <summary>The public-address lookup the probe uses (per family, pinned, with fallbacks: A5). The address sync shares it.</summary>
+    internal IPublicAddressLookup PublicLookup
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (_disposed)
+                {
+                    throw new OperationCanceledException();
+                }
+
+                return _overrides.PublicLookup ?? (_ownLookup ??= new PublicAddressLookup());
+            }
+        }
+    }
+
+    /// <summary>The recorded forwards, read from the file; nothing is asked of the router.</summary>
+    internal IReadOnlyList<ForwardRecord> RecordedForwards() => new ForwardsStore(Path.Combine(Folder(), "forwards.json")).Load();
+
     internal HostFirewall Firewall
     {
         get

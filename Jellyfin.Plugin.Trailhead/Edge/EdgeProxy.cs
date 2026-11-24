@@ -34,14 +34,22 @@ internal sealed class EdgeProxy : IAsyncDisposable
     private readonly LoginThrottle _throttle;
     private readonly ILogger _logger;
     private readonly string _prefix;
+    private readonly PhoneTest? _phone;
+    private readonly Func<IPAddress, bool> _isHome;
+    private readonly Health.PublicAddressWatch? _watch;
 
-    internal EdgeProxy(ProxySettings settings, EdgeIdentity identity, Func<GateState> gate, LoginThrottle throttle, ILoggerFactory edgeLoggers, ILogger logger)
+    /// <param name="isHome">True for an address on this server's home network. When it can't tell, it must say true:
+    /// a phone-test hit then reads "from home, not proof" rather than a pass nobody proved.</param>
+    internal EdgeProxy(ProxySettings settings, EdgeIdentity identity, Func<GateState> gate, LoginThrottle throttle, ILoggerFactory edgeLoggers, ILogger logger, PhoneTest? phone = null, Func<IPAddress, bool>? isHome = null, Health.PublicAddressWatch? watch = null)
     {
         _settings = settings;
         _identity = identity;
         _gate = gate;
         _throttle = throttle;
         _logger = logger;
+        _phone = phone;
+        _isHome = isHome ?? (_ => true);
+        _watch = watch;
 
         // YARP's forwarder in a container of its own: Jellyfin's would be the wrong lifetime, and Edge's Kestrel hosts
         // (one per port) shouldn't each have one.
@@ -118,9 +126,26 @@ internal sealed class EdgeProxy : IAsyncDisposable
                 return;
             }
 
+            // Seen before the gate, so a hairpinning home is noticed even while the gate is shut.
+            var ownAddress = remote is not null && _watch is not null && _watch.IsOwn(remote);
+
             if (!probe && !_gate().IsOpen)
             {
                 await RefuseAsync(ctx, StatusCodes.Status503ServiceUnavailable, _settings.RetryAfter, "edge.gate.closed").ConfigureAwait(false);
+                return;
+            }
+
+            // Edge's own paths, after the gate: before it passes, the way to Jellyfin isn't proven, so a phone test
+            // passing then would prove nothing. Never passed on to Jellyfin; anything here but a live token is a 404.
+            if (ctx.Request.Path.Value is { } own && own.StartsWith(PhoneTest.Prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                if (_phone is null || remote is null)
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+
+                await _phone.HandleAsync(ctx, remote, ownAddress || IsHome(remote)).ConfigureAwait(false);
                 return;
             }
 
@@ -171,6 +196,19 @@ internal sealed class EdgeProxy : IAsyncDisposable
         finally
         {
             ticket?.Finish(SignInOutcome.Neither);
+        }
+    }
+
+    private bool IsHome(IPAddress remote)
+    {
+        try
+        {
+            return _isHome(remote);
+        }
+        catch (Exception)
+        {
+            // Can't tell: not proof.
+            return true;
         }
     }
 
