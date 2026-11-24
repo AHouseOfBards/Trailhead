@@ -99,6 +99,7 @@ internal sealed class ApiHost : IAsyncDisposable
         builder.Logging.AddProvider(new ListLoggerProvider(log));
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSingleton(setup);
+        builder.Services.AddSingleton(new Jellyfin.Plugin.Trailhead.Edge.EdgeIdentity());
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(Plugin).Assembly)
             .AddControllersAsServices()

@@ -35,6 +35,7 @@ public sealed class ApiAuthTests : ApiTestBase
 
         // A harness that finds nothing would pass every loop below.
         Assert.NotEmpty(routes);
+        var anonymous = DocumentedAnonymous().Select(r => r.Method + " " + r.Path).ToHashSet();
         foreach (var (method, path) in routes)
         {
             var url = Concrete(path);
@@ -44,6 +45,15 @@ public sealed class ApiAuthTests : ApiTestBase
             using var user = await SendAsync(new HttpMethod(method), url, role: "user", body: body);
             using var admin = await SendAsync(new HttpMethod(method), url, role: "admin", body: body);
 
+            if (anonymous.Contains(method + " " + path))
+            {
+                // Open on purpose (Edge's echo), and answering nothing to anyone without this start's marker.
+                Assert.True(anon.StatusCode == HttpStatusCode.NotFound, $"{method} {path} gave {(int)anon.StatusCode} with no token");
+                Assert.True(user.StatusCode == HttpStatusCode.NotFound, $"{method} {path} gave {(int)user.StatusCode} for a user");
+                Assert.True(admin.StatusCode == HttpStatusCode.NotFound, $"{method} {path} gave {(int)admin.StatusCode} for an admin");
+                continue;
+            }
+
             Assert.True(anon.StatusCode == HttpStatusCode.Unauthorized, $"{method} {path} gave {(int)anon.StatusCode} with no token");
             Assert.True(user.StatusCode == HttpStatusCode.Forbidden, $"{method} {path} gave {(int)user.StatusCode} for a user");
             Assert.True(admin.StatusCode is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden), $"{method} {path} gave {(int)admin.StatusCode} for an admin");
@@ -51,9 +61,14 @@ public sealed class ApiAuthTests : ApiTestBase
     }
 
     [Fact]
-    public void No_action_in_the_plugin_is_reachable_without_authorization()
+    public void The_only_actions_reachable_without_authorization_are_the_documented_anonymous_ones()
     {
-        Assert.Empty(AnonymousRouteAudit.Find(typeof(Plugin).Assembly));
+        var open = AnonymousRouteAudit.Find(typeof(Plugin).Assembly).Select(r => "/" + r.Route.ToLowerInvariant()).Order().ToList();
+        var documented = DocumentedAnonymous().Select(r => r.Path).Order().ToList();
+
+        Assert.NotEmpty(documented);
+        Assert.Equal(documented, open);
+        Assert.Equal(new[] { nameof(EdgeEchoController) }, AnonymousRouteAudit.Find(typeof(Plugin).Assembly).Select(r => r.Controller).Distinct());
     }
 
     [Fact]
@@ -73,7 +88,11 @@ public sealed class ApiAuthTests : ApiTestBase
         Assert.NotEmpty(real);
         Assert.NotEmpty(documented);
         Assert.Equal(documented, real);
-        Assert.All(DocumentedRoutes(), r => Assert.Equal("admin", r.Level));
+
+        // Every route is admin, except the ones listed again under "Anonymous routes", and those are marked so.
+        var anonymous = DocumentedAnonymous().Select(r => r.Method + " " + r.Path).ToHashSet();
+        Assert.All(DocumentedRoutes(), r => Assert.Equal(anonymous.Contains(r.Method + " " + r.Path) ? "anonymous" : "admin", r.Level));
+        Assert.All(anonymous, a => Assert.Contains(a, documented));
     }
 
     [Fact]
@@ -108,6 +127,9 @@ public sealed class ApiAuthTests : ApiTestBase
 
     private static List<(string Method, string Path, string Level)> DocumentedRoutes()
         => Section("All routes").Select(Cells).Select(c => (c[0], c[1].ToLowerInvariant(), c[2])).ToList();
+
+    private static List<(string Method, string Path)> DocumentedAnonymous()
+        => Section("Anonymous routes").Select(Cells).Select(c => (c[0], c[1].ToLowerInvariant())).ToList();
 
     private static List<string> DocumentedCodes() => Section("Errors").Select(Cells).Select(c => c[0]).ToList();
 }

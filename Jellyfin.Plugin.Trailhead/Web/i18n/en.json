@@ -26,6 +26,10 @@
   "error.dynu_key_missing": "Trailhead has no usable Dynu key. Save your key first.",
   "error.dynu_unavailable": "Couldn't reach Dynu just now. Try again in a minute.",
   "error.rate_limited": "Too many tries. Wait a minute and try again.",
+  "edge.gate.closed": "This server isn't ready for outside connections yet. Try again in a minute.",
+  "edge.throttle.tooMany": "Too many sign-in attempts at once. Wait a moment and try again.",
+  "edge.provision": "Set up HTTPS on Trailhead's page in the dashboard.",
+
   "error.bad_request": "Trailhead couldn't read that request.",
   "error.request_too_large": "That request is too big.",
   "error.save_failed": "Couldn't save the setting. Try again.",

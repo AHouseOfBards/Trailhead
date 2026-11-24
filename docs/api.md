@@ -11,10 +11,12 @@ release. JSON is PascalCase, as Jellyfin's is, and is read in either casing.
 
 ## All routes
 
-Every route needs an administrator (`admin`: a signed-in administrator, or an API key from Dashboard, API Keys).
+Every route needs an administrator (`admin`: a signed-in administrator, or an API key from Dashboard, API Keys),
+except the one listed again under Anonymous routes.
 
 | Method | Path | Level | Purpose |
 |---|---|---|---|
+| `GET` | `/trailhead/edge/echo` | anonymous | Part of Trailhead's own self-test. Answers 404 to every other caller. |
 | `GET` | `/trailhead/setup` | admin | The state the setup page draws itself from. Never holds the Dynu key. |
 | `POST` | `/trailhead/dynu-key` | admin | Checks a Dynu API key with Dynu and, if Dynu accepts it, saves it sealed. |
 | `POST` | `/trailhead/name/check` | admin | Looks a name up on the Dynu account. Saves nothing. |
@@ -23,7 +25,24 @@ Every route needs an administrator (`admin`: a signed-in administrator, or an AP
 
 ## Anonymous routes
 
-None.
+| Method | Path | Why it needs no login | What keeps it closed |
+|---|---|---|---|
+| `GET` | `/trailhead/edge/echo` | Trailhead's listener checks itself before it lets outside traffic in: it asks Jellyfin which client address it saw. That check has no Jellyfin login. | It answers 404, the same as a missing route, unless the request carries a secret made at each Jellyfin start and came from the listener's own address. The listener passes this path on only for its own check. The answer holds only the caller's own address and the value it sent. |
+
+## Trailhead's listener
+
+Once setup has a name and a certificate, Trailhead listens for HTTPS on port 8443 (or the next free one of 8444,
+9443, 10443 and 18443), and on 443 too when the system allows it, and passes requests on to Jellyfin unchanged apart
+from these:
+
+- `X-Forwarded-For`, `X-Forwarded-Proto` (`https`) and `X-Forwarded-Host` are set by Trailhead; a client's own copies,
+  and `Forwarded`, `X-Real-IP` and `X-Original-*`, are dropped.
+- Headers named in the client's `Connection` header, and `Keep-Alive` and `Proxy-Connection`, are dropped.
+- Until its self-test passes, it answers `503` with `Retry-After` and a short plain-text reason, to everyone.
+- Failed sign-ins on `POST /Users/AuthenticateByName`, `POST /Users/{id}/Authenticate` and
+  `POST /Users/AuthenticateWithQuickConnect` slow down: after 3 failures for one name from one address (or 20 for
+  any names from one address), each next try waits, from 1 second doubling to 30. A success clears it. More than a few
+  tries waiting at once get `429` with `Retry-After`.
 
 ## Changed Jellyfin routes
 
@@ -99,4 +118,9 @@ Fields keep their type and meaning within a major version. Callers ignore fields
 
 ## For other plugins
 
-Nothing is offered in-process yet.
+`campground.https.v1`, minor 1, in-process through Campground.Shared `HttpsClient`:
+
+- `status` answers `HttpsStatus(Configured, PublicUrl, Edge)`. `Edge.Active` is true only while the listener runs
+  and its self-test passes; `Edge.Marker` is set only then.
+- `provision` never starts setup by itself (it opens a port): it answers `Started: false` and a `FollowUpUrl` to
+  Trailhead's page.
