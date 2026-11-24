@@ -27,6 +27,8 @@
     <ProjectReference Include="..\Jellyfin.Plugin.Trailhead\Jellyfin.Plugin.Trailhead.csproj" />
     <!-- Test-only fake of the Dynu API (a real Kestrel server), shared with the Pebble tests and never part of the plugin. -->
     <Compile Include="..\TestSupport\FakeDynu.cs" Link="TestSupport\FakeDynu.cs" />
+    <!-- Test-only router: SSDP on a real UDP socket, the description and SOAP on a real Kestrel. -->
+    <Compile Include="..\TestSupport\FakeIgd.cs" Link="TestSupport\FakeIgd.cs" />
   </ItemGroup>
 
 </Project>
