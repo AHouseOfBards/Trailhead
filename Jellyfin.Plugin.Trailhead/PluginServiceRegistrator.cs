@@ -19,5 +19,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // The setup routes' work. It does no I/O until a route is called, for the same reason.
         serviceCollection.AddSingleton<SetupService>();
+
+        // The router, the probe and the host firewall. Built on first use, so a broken network can't stop Jellyfin
+        // starting; RenewForwardsTask is found by the same scan as RenewCertificateTask.
+        serviceCollection.AddSingleton<RouterServices>();
     }
 }
